@@ -182,7 +182,7 @@ int main(int argc, char const *argv[]) {
   const bool isUseGenGrid = true; // set to 'false' to use manual gmesh creation
   TPZAutoPointer<TPZGeoMesh> gmesh = nullptr;
   if (isUseGenGrid) {
-    const int neldiv = 2; // number of elements in each direction
+    const int neldiv = 150; // number of elements in each direction
     gmesh = createMeshWithGenGrid({neldiv, neldiv}, {0., 0.}, {2., 1.});
   } else {
     gmesh = createRectangularGmesh();
@@ -192,7 +192,7 @@ int main(int argc, char const *argv[]) {
   TPZVTKGeoMesh::PrintGMeshVTK(gmesh, out);
 
   // ----- Create computational mesh -----
-  const int pord = 1; // polynomial order (number of functions per element [number of equations per element]) increases the density of the global matrix
+  const int pord = 3; // polynomial order (number of functions per element [number of equations per element]) increases the density of the global matrix
   TPZAutoPointer<TPZCompMesh> cmesh = createCompMesh(gmesh.operator->(), pord);
   if (print) cmesh->Print(std::cout);
 
@@ -225,7 +225,8 @@ int main(int argc, char const *argv[]) {
 
   matsp->SetNumThreads(nthreads); // number of threads
   an.SetStructuralMatrix(*matsp);
-  std::cout << "Number of equation = " << cmesh->NEquations() << std::endl;
+  int64_t neq = cmesh->NEquations();
+  std::cout << "Number of equation = " << neq << std::endl;
 
   TPZStepSolver<STATE> step;
   step.SetDirect(ECholesky); // direct solver
@@ -233,15 +234,22 @@ int main(int argc, char const *argv[]) {
 
   if (solverType == ESkyline) {
     an.Run(); // assembles and solves the linear system
-  } else if (solverType == EPardiso) {
+  } else {
+    if (neq > 20000)
+      TPZSimpleTimer t("Time for assembly", true);
     an.Assemble();
+
+    if (neq > 20000) {
+      std::cout << "Entering Solve\n";
+      std::cout.flush();
+    }
 
     auto mCast = an.MatrixSolver<STATE>().Matrix();
     mCast->SetDefPositive(true);
 
-    an.Solve();
-  } else if (solverType == EMumps) {
-    an.Assemble();
+    if (neq > 20000)
+      TPZSimpleTimer t("Time for solving", true);
+
     an.Solve();
   }
 

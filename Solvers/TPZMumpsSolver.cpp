@@ -14,7 +14,7 @@
 
 /*auxiliary functions*/
 template <typename TVar>
-void Error_check(int error, TVar info2);
+void Error_check(int64_t error, TVar info2);
 
 template <class TVar>
 int DataType([[maybe_unused]] TVar a);
@@ -97,7 +97,7 @@ void TPZMumpsSolver<TVar>::FreeMumpsMemory() {
       std::cerr << "MUMPS Error during memory deallocation: "
                 << "INFO(1) = " << fMumpsData.info[0]
                 << ", INFO(2) = " << fMumpsData.info[1] << std::endl;
-      Error_check(int(fMumpsData.info[0]), fMumpsData.info[1]);
+      Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
       DebugStop();
     }
 
@@ -210,7 +210,7 @@ void TPZMumpsSolver<TVar>::Decompose(TPZMatrix<TVar> *mat) {
       std::cerr << "MUMPS Error during initialization: "
                 << "INFO(1) = " << fMumpsData.info[0]
                 << ", INFO(2) = " << fMumpsData.info[1] << std::endl;
-      Error_check(int(fMumpsData.info[0]), fMumpsData.info[1]);
+      Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
       DebugStop();
     }
     fMumpsInitialized = true;
@@ -434,7 +434,7 @@ void TPZMumpsSolver<TVar>::Decompose(TPZMatrix<TVar> *mat) {
     std::cerr << "MUMPS analysis error: "
               << "INFO(1) = " << fMumpsData.info[0]
               << ", INFO(2) = " << fMumpsData.info[1] << std::endl;
-    Error_check(int(fMumpsData.info[0]), fMumpsData.info[1]);
+    Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
     DebugStop();
   }
 
@@ -446,7 +446,7 @@ void TPZMumpsSolver<TVar>::Decompose(TPZMatrix<TVar> *mat) {
     std::cerr << "MUMPS factorization error: "
               << "INFO(1) = " << fMumpsData.info[0]
               << ", INFO(2) = " << fMumpsData.info[1] << std::endl;
-    Error_check(int(fMumpsData.info[0]), fMumpsData.info[1]);
+    Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
     DebugStop();
   }
 
@@ -544,7 +544,7 @@ void TPZMumpsSolver<TVar>::Solve(const TPZMatrix<TVar> *mat, const TPZFMatrix<TV
     std::cerr << "MUMPS solve error: "
               << "INFO(1) = " << fMumpsData.info[0]
               << ", INFO(2) = " << fMumpsData.info[1] << std::endl;
-    Error_check(int(fMumpsData.info[0]), fMumpsData.info[1]);
+    Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
 
     // Try refactorization if there was an error
     if (fMumpsData.info[0] == -10 || fMumpsData.info[0] == -13) {
@@ -557,7 +557,7 @@ void TPZMumpsSolver<TVar>::Solve(const TPZMatrix<TVar> *mat, const TPZFMatrix<TV
       if (fMumpsData.info[0] < 0) {
         std::cerr << "MUMPS re-analysis error: "
                   << "INFO(1) = " << fMumpsData.info[0] << std::endl;
-        Error_check(int(fMumpsData.info[0]), fMumpsData.info[1]);
+        Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
         DebugStop();
       }
 
@@ -567,7 +567,7 @@ void TPZMumpsSolver<TVar>::Solve(const TPZMatrix<TVar> *mat, const TPZFMatrix<TV
       if (fMumpsData.info[0] < 0) {
         std::cerr << "MUMPS re-factorization error: "
                   << "INFO(1) = " << fMumpsData.info[0] << std::endl;
-        Error_check(int(fMumpsData.info[0]), fMumpsData.info[1]);
+        Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
         DebugStop();
       }
 
@@ -579,7 +579,7 @@ void TPZMumpsSolver<TVar>::Solve(const TPZMatrix<TVar> *mat, const TPZFMatrix<TV
       if (fMumpsData.info[0] < 0) {
         std::cerr << "MUMPS solve error after refactorization: "
                   << "INFO(1) = " << fMumpsData.info[0] << std::endl;
-        Error_check(int(fMumpsData.info[0]), fMumpsData.info[1]);
+        Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
         DebugStop();
       }
     } else {
@@ -866,7 +866,7 @@ int DataType([[maybe_unused]] std::complex<float> a) {
  * @param INFO2 Secondary information (INFO(2)).
  */
 template <typename TVar>
-void Error_check(int INFO1, TVar INFO2) {
+void Error_check(int64_t INFO1, TVar INFO2) {
   // MUMPS error codes are stored in INFO(1)
   // Negative values indicate errors
   // Positive values indicate warnings
@@ -958,7 +958,7 @@ void Error_check(int INFO1, TVar INFO2) {
     std::cout << "MUMPS error -28: NRHS is out of range. NRHS = " << INFO2 << " (should be >= 1)." << std::endl;
     break;
   case -29:
-    std::cout << "MUMPS error -29: LRHS is out of range. LRHS = " << INFO2 << ", should be >= max(1, N) = " << std::max(1, INFO2) << "." << std::endl;
+    std::cout << "MUMPS error -29: LRHS is out of range. LRHS = " << INFO2 << ", should be >= max(1, N) = " << std::max(int64_t(1), static_cast<int64_t>(INFO2)) << "." << std::endl;
     break;
   case -30:
     std::cout << "MUMPS error -30: NRHS or LRHS incompatible with JOB. JOB = " << INFO2 << "." << std::endl;

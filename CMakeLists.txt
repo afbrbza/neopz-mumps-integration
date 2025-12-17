@@ -6,9 +6,12 @@ find_package(MKL REQUIRED)
 find_package(NeoPZ REQUIRED HINTS ${CMAKE_SOURCE_DIR}/../neopz_install/ ${CMAKE_SOURCE_DIR}/../neopz_install/)
 
 add_executable(firsttest main.cpp)
-# target_link_libraries(firsttest PRIVATE NeoPZ::pz MKL::mkl_intel_ilp64 MKL::mkl_intel_thread MKL::mkl_core)
-# target_compile_definitions(firsttest PRIVATE MKL_ILP64)
-target_link_libraries(firsttest PRIVATE NeoPZ::pz -fsanitize=address)
+#############################################################################################################
+target_link_libraries(firsttest PRIVATE NeoPZ::pz MKL::mkl_intel_ilp64 MKL::mkl_intel_thread MKL::mkl_core)
+target_compile_definitions(firsttest PRIVATE MKL_ILP64)
+#############################################################################################################
+# target_link_libraries(firsttest PRIVATE NeoPZ::pz -fsanitize=address)
+#############################################################################################################
 add_compile_options(-fsanitize=address -g)
 
 add_subdirectory(Solvers)
