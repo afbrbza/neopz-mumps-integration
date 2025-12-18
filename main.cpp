@@ -15,7 +15,13 @@
 #include <TPZGenGrid3D.h>
 #include <TPZLinearAnalysis.h>
 #include <iostream>
+#include <mkl_service.h>
+#include <numeric>
+#include <omp.h>
 #include <pzlog.h>
+#include <unistd.h>
+
+extern "C" void openblas_set_num_threads(int num_threads);
 
 using namespace std;
 
@@ -139,131 +145,323 @@ TPZCompMesh *createCompMesh(TPZGeoMesh *gmesh, const int pord) {
   return cmesh;
 }
 
-/**
- * @brief Main function for solving a finite element problem using NeoPZ library.
- *
- * This program demonstrates the complete workflow of solving a PDE using the NeoPZ
- * finite element library:
- * 1. Creates a geometric mesh (either using GenGrid or manual creation)
- * 2. Creates a computational mesh with specified polynomial order
- * 3. Sets up a linear analysis with a chosen direct solver
- * 4. Assembles and solves the linear system
- * 5. Post-processes results to VTK format
- *
- * @details
- * The solver selection includes three options:
- * - EPardiso: Uses Pardiso solver (requires Pardiso installation). The direct solver
- *   type is automatically detected based on the matrix type and the SetDirect() call
- *   is for clarity only to avoid confusion.
- * - EMumps: Uses MUMPS solver (requires MUMPS installation). The direct solver type
- *   is automatically detected based on the matrix type and the SetDirect() call is
- *   for clarity only to avoid confusion.
- * - ESkyline: Uses Skyline solver. The direct solver is explicitly used via SetDirect().
- *
- * @note The Cholesky (LLT) factorization is used as the direct solver. This requires
- * that the matrix is symmetric. For Darcy flow, the matrix is symmetric but INDEFINITE
- * (not positive definite), so MUMPS/Pardiso will use LDL^T factorization with pivoting.
- * Do NOT call SetDefPositive(true) for Darcy flow matrices as they are indefinite.
- *
- * @param argc Number of command-line arguments
- * @param argv Command-line arguments
- * @return int Exit status (0 on success)
- */
-int main(int argc, char const *argv[]) {
+std::string executeCommand(const std::string &command) {
+  std::array<char, 128> buffer;
+  std::string result;
+  FILE *pipe = popen(command.c_str(), "r");
+  if (!pipe) throw std::runtime_error("popen() failed!");
+  while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
+    result += buffer.data();
+  }
+  int status = pclose(pipe);
+  if (status == -1) throw std::runtime_error("pclose() failed!");
+  return result;
+}
 
+int main(int argc, char const *argv[]) {
 #ifdef PZ_LOG
   TPZLogger::InitializePZLOG();
 #endif
-  const int nthreads = 0;
 
-  bool print = false;
+  enum Solvers { EPardiso,
+                 EMumps };
+  const int nthreads = 0; // number of threads (0 = automatic)
+  auto auxExecSolvers = [&](Solvers solver,
+                            TPZAutoPointer<TPZStructMatrixT<STATE>> &matsp,
+                            TPZAutoPointer<TPZCompMesh> &cmesh)
+      -> map<string, double> {
+    // var to save result of solver execution an return it
+    map<string, double> result;
 
-  // ----- Create geometric mesh -----
-  const bool isUseGenGrid = true; // set to 'false' to use manual gmesh creation
-  TPZAutoPointer<TPZGeoMesh> gmesh = nullptr;
-  if (isUseGenGrid) {
-    const int neldiv = 150; // number of elements in each direction
-    gmesh = createMeshWithGenGrid({neldiv, neldiv}, {0., 0.}, {2., 1.});
-  } else {
-    gmesh = createRectangularGmesh();
-  }
-  if (print) gmesh->Print(std::cout);
-  std::ofstream out("geomesh.vtk");
-  TPZVTKGeoMesh::PrintGMeshVTK(gmesh, out);
+    // ----- Create analysis object -----
+    TPZLinearAnalysis an(cmesh);
 
-  // ----- Create computational mesh -----
-  const int pord = 3; // polynomial order (number of functions per element [number of equations per element]) increases the density of the global matrix
-  TPZAutoPointer<TPZCompMesh> cmesh = createCompMesh(gmesh.operator->(), pord);
-  if (print) cmesh->Print(std::cout);
+    matsp->SetNumThreads(nthreads); // number of threads
+    an.SetStructuralMatrix(*matsp);
 
-  // ----- Create analysis object -----
-  TPZLinearAnalysis an(cmesh);
+    TPZStepSolver<STATE> step;
+    step.SetDirect(ECholesky); // direct solver
+    an.SetSolver(step);
 
-  // criar um enum dos solvers que estou usando: Pardiso, Mumps e o que o Skyline está chamando
-  enum EnumSolvers {
-    EPardiso,
-    EMumps,
-    ESkyline
-  };
+    {
+      {
+        TPZSimpleTimer t("Time for assembly", true);
+        an.Assemble();
+        result["AssemblyTime_s"] = t.ReturnTimeDouble() / 1000;
+      }
 
-  const EnumSolvers solverType = EMumps;
-  TPZAutoPointer<TPZStructMatrixT<STATE>> matsp;
-  if (solverType == EPardiso) {
-    std::cout << "Using Pardiso solver" << std::endl;
-    matsp = new TPZSSpStructMatrix<STATE>(cmesh); /* para quem tem pardiso */
-  } else if (solverType == EMumps) {
-    // NOTE: Using non-symmetric matrix format for MUMPS due to bugs in symmetric version
-    // See BUG_REPORT_MUMPS_SYMMETRIC.md for details
-    // std::cout << "Using MUMPS solver (symmetric format)" << std::endl;
-    // matsp = new TPZSSpStructMatrixMumps<STATE>(cmesh);
-    std::cout << "Using MUMPS solver (non-symmetric format)" << std::endl;
-    matsp = new TPZSpStructMatrixMumps<STATE>(cmesh);
-  } else {
-    std::cout << "Using Skyline solver" << std::endl;
-    matsp = new TPZSkylineStructMatrix<STATE>(cmesh);
-  }
+      cout << "Seconds for assembly: " << result["AssemblyTime_s"] << " s\n";
 
-  matsp->SetNumThreads(nthreads); // number of threads
-  an.SetStructuralMatrix(*matsp);
-  int64_t neq = cmesh->NEquations();
-  std::cout << "Number of equation = " << neq << std::endl;
-
-  TPZStepSolver<STATE> step;
-  step.SetDirect(ECholesky); // direct solver
-  an.SetSolver(step);
-
-  if (solverType == ESkyline) {
-    an.Run(); // assembles and solves the linear system
-  } else {
-    if (neq > 20000)
-      TPZSimpleTimer t("Time for assembly", true);
-    an.Assemble();
-
-    if (neq > 20000) {
-      std::cout << "Entering Solve\n";
-      std::cout.flush();
+      if (solver == EPardiso) {
+        result["RealUsedThreadsAssembly"] = mkl_get_max_threads();
+        cout << "MKL threads used in assembly: " << result["RealUsedThreadsAssembly"] << "\n";
+      } else if (solver == EMumps) {
+#pragma omp parallel
+        {
+#pragma omp master
+          {
+            result["RealUsedThreadsAssembly"] = omp_get_num_threads();
+            cout << "OpenMP threads used in assembly: " << result["RealUsedThreadsAssembly"] << "\n";
+          }
+        }
+      }
     }
 
     auto mCast = an.MatrixSolver<STATE>().Matrix();
     mCast->SetDefPositive(true);
 
-    if (neq > 20000)
-      TPZSimpleTimer t("Time for solving", true);
+    {
+      {
+        TPZSimpleTimer t("Time for solve", true);
+        an.Solve();
+        result["SolveTime_s"] = t.ReturnTimeDouble() / 1000;
+      }
+      cout << "Seconds for solve: " << result["SolveTime_s"] << " s\n";
 
-    an.Solve();
+      if (solver == EPardiso) {
+        result["RealUsedThreadsSolve"] = mkl_get_max_threads();
+        cout << "MKL threads used in solve: " << result["RealUsedThreadsSolve"] << "\n";
+      } else if (solver == EMumps) {
+#pragma omp parallel
+        {
+#pragma omp master
+          {
+            result["RealUsedThreadsSolve"] = omp_get_num_threads();
+            cout << "OpenMP threads used in solve: " << result["RealUsedThreadsSolve"] << "\n";
+          }
+        }
+      }
+    }
+
+    return result;
+  };
+
+  const TPZVec<int> nElemsDiv{150, 200};
+  const TPZVec<int> POrds{1, 2, 3};
+  int maxNumOfThreads = executeCommand("nproc --all").empty() ? 8 : std::stoi(executeCommand("nproc --all"));
+  TPZVec<int> nThreadsSolver(maxNumOfThreads);
+  iota(nThreadsSolver.begin(), nThreadsSolver.end(), 1);
+  // TPZVec<int> nThreadsSolver{9};
+
+  const bool isOutFile = true;
+  std::ofstream csvFile("solver_performance_results.csv");
+  std::ostream &resultsFile = isOutFile ? (std::ostream &)csvFile : std::cout;
+  resultsFile << "NumElementsPerDir,PolyOrder,NumEquations,Solver,NumSolverThreads,AssemblyTime_s,RealUsedThreadsAssembly,SolveTime_s,RealUsedThreadsSolve\n";
+
+  // executeCommand("clear"); // clear console output
+  for (auto neldiv : nElemsDiv) {
+    TPZAutoPointer<TPZGeoMesh> gmesh = createMeshWithGenGrid({neldiv, neldiv}, {0., 0.}, {2., 1.});
+
+    for (auto pord : POrds) {
+      TPZAutoPointer<TPZCompMesh> cmesh = createCompMesh(gmesh.operator->(), pord);
+
+      int64_t neq = cmesh->NEquations();
+
+      map<string, double> result;
+      for (auto nthreads : nThreadsSolver) {
+        // ===== PARDISO TEST =====
+        {
+          std::cout << "\n\nRunning for " << neldiv << " elements in each direction.\n";
+          std::cout << "  Polynomial order: " << pord << std::endl;
+          std::cout << "Number of equation = " << neq << std::endl;
+          std::cout << "\n=== Using Pardiso solver with " << nthreads << " threads ===\n";
+
+          // Pardiso uses MKL, disable OpenBLAS to avoid conflicts
+          openblas_set_num_threads(1);
+
+          // Disable MKL dynamic threading to force exact number of threads
+          mkl_set_dynamic(0);
+
+          // manual says that the number of threads should be set both for MKL and OpenMP
+          executeCommand("export OMP_NUM_THREADS=" + std::to_string(nthreads));
+          omp_set_num_threads(nthreads);
+          mkl_set_num_threads(nthreads);
+
+          // Also set domain-specific threads
+          mkl_domain_set_num_threads(nthreads, MKL_DOMAIN_ALL);
+
+          // Verify MKL settings
+          int mkl_max_threads = mkl_get_max_threads();
+          std::cout << "MKL max threads: " << mkl_max_threads << std::endl;
+
+          TPZAutoPointer<TPZStructMatrixT<STATE>> matspPardiso =
+              new TPZSSpStructMatrix<STATE>(cmesh);
+
+          result = auxExecSolvers(EPardiso, matspPardiso, cmesh);
+        }
+        resultsFile << neldiv << "," << pord << "," << neq << ",Pardiso," << nthreads << ","
+                    << result["AssemblyTime_s"] << "," << result["RealUsedThreadsAssembly"] << ","
+                    << result["SolveTime_s"] << "," << result["RealUsedThreadsSolve"] << "\n";
+      }
+
+      for (auto nthreads : nThreadsSolver) {
+        // ===== MUMPS TEST =====
+        {
+          std::cout << "\n\nRunning for " << neldiv << " elements in each direction.\n";
+          std::cout << "  Polynomial order: " << pord << std::endl;
+          std::cout << "Number of equation = " << neq << std::endl;
+          std::cout << "\n=== Using MUMPS solver with " << nthreads << " threads ===\n";
+
+          // MUMPS uses OpenBLAS for BLAS operations + OpenMP for parallelism
+          mkl_set_num_threads(1); // Disable MKL to avoid conflicts
+          openblas_set_num_threads(nthreads);
+          omp_set_num_threads(nthreads);
+
+// Verify OpenMP settings
+#pragma omp parallel
+          {
+#pragma omp master
+            {
+              std::cout << "OpenMP threads: " << omp_get_num_threads() << std::endl;
+            }
+          }
+
+          TPZAutoPointer<TPZStructMatrixT<STATE>> matspMumps =
+              new TPZSpStructMatrix<STATE>(cmesh);
+
+          result = auxExecSolvers(EMumps, matspMumps, cmesh);
+        }
+        resultsFile << neldiv << "," << pord << "," << neq << ",MUMPS," << nthreads << ","
+                    << result["AssemblyTime_s"] << "," << result["RealUsedThreadsAssembly"] << ","
+                    << result["SolveTime_s"] << "," << result["RealUsedThreadsSolve"] << "\n";
+      }
+    }
   }
 
-  print = false;
-  if (print) an.Solution().Print("Solution");
-
-  // Post-processing the results
-  const std::string plotfile = "postproc"; // without extension
-  constexpr int vtkRes(0);                 // 0 for no refinement
-
-  TPZManVector<std::string, 2> fields = {"Flux", "Pressure"};
-  auto vtk = TPZVTKGenerator(cmesh, fields, plotfile, vtkRes);
-
-  vtk.Do();
-
-  return 0;
+  if (isOutFile)
+    csvFile.close();
 }
+
+// /**
+//  * @brief Main function for solving a finite element problem using NeoPZ library.
+//  *
+//  * This program demonstrates the complete workflow of solving a PDE using the NeoPZ
+//  * finite element library:
+//  * 1. Creates a geometric mesh (either using GenGrid or manual creation)
+//  * 2. Creates a computational mesh with specified polynomial order
+//  * 3. Sets up a linear analysis with a chosen direct solver
+//  * 4. Assembles and solves the linear system
+//  * 5. Post-processes results to VTK format
+//  *
+//  * @details
+//  * The solver selection includes three options:
+//  * - EPardiso: Uses Pardiso solver (requires Pardiso installation). The direct solver
+//  *   type is automatically detected based on the matrix type and the SetDirect() call
+//  *   is for clarity only to avoid confusion.
+//  * - EMumps: Uses MUMPS solver (requires MUMPS installation). The direct solver type
+//  *   is automatically detected based on the matrix type and the SetDirect() call is
+//  *   for clarity only to avoid confusion.
+//  * - ESkyline: Uses Skyline solver. The direct solver is explicitly used via SetDirect().
+//  *
+//  * @note The Cholesky (LLT) factorization is used as the direct solver. This requires
+//  * that the matrix is symmetric. For Darcy flow, the matrix is symmetric but INDEFINITE
+//  * (not positive definite), so MUMPS/Pardiso will use LDL^T factorization with pivoting.
+//  * Do NOT call SetDefPositive(true) for Darcy flow matrices as they are indefinite.
+//  *
+//  * @param argc Number of command-line arguments
+//  * @param argv Command-line arguments
+//  * @return int Exit status (0 on success)
+//  */
+// int mainOriginal(int argc, char const *argv[]) {
+
+// #ifdef PZ_LOG
+//   TPZLogger::InitializePZLOG();
+// #endif
+//   const int nthreads = 0;
+
+//   bool print = false;
+
+//   // ----- Create geometric mesh -----
+//   const bool isUseGenGrid = true; // set to 'false' to use manual gmesh creation
+//   TPZAutoPointer<TPZGeoMesh> gmesh = nullptr;
+//   if (isUseGenGrid) {
+//     const int neldiv = 2; // number of elements in each direction
+//     gmesh = createMeshWithGenGrid({neldiv, neldiv}, {0., 0.}, {2., 1.});
+//   } else {
+//     gmesh = createRectangularGmesh();
+//   }
+//   if (print) gmesh->Print(std::cout);
+//   std::ofstream out("geomesh.vtk");
+//   TPZVTKGeoMesh::PrintGMeshVTK(gmesh, out);
+
+//   // ----- Create computational mesh -----
+//   const int pord = 1; // polynomial order (number of functions per element [number of equations per element]) increases the density of the global matrix
+//   TPZAutoPointer<TPZCompMesh> cmesh = createCompMesh(gmesh.operator->(), pord);
+//   if (print) cmesh->Print(std::cout);
+
+//   // ----- Create analysis object -----
+//   TPZLinearAnalysis an(cmesh);
+
+//   // criar um enum dos solvers que estou usando: Pardiso, Mumps e o que o Skyline está chamando
+//   enum EnumSolvers {
+//     EPardiso,
+//     EMumps,
+//     ESkyline
+//   };
+
+//   const EnumSolvers solverType = EMumps;
+//   TPZAutoPointer<TPZStructMatrixT<STATE>> matsp;
+//   if (solverType == EPardiso) {
+//     std::cout << "Using Pardiso solver" << std::endl;
+//     matsp = new TPZSSpStructMatrix<STATE>(cmesh); /* para quem tem pardiso */
+//   } else if (solverType == EMumps) {
+//     // NOTE: Using non-symmetric matrix format for MUMPS due to bugs in symmetric version
+//     // See BUG_REPORT_MUMPS_SYMMETRIC.md for details
+//     // std::cout << "Using MUMPS solver (symmetric format)" << std::endl;
+//     // matsp = new TPZSSpStructMatrixMumps<STATE>(cmesh);
+//     std::cout << "Using MUMPS solver (non-symmetric format)" << std::endl;
+//     matsp = new TPZSpStructMatrixMumps<STATE>(cmesh);
+//   } else {
+//     std::cout << "Using Skyline solver" << std::endl;
+//     matsp = new TPZSkylineStructMatrix<STATE>(cmesh);
+//   }
+
+//   matsp->SetNumThreads(nthreads); // number of threads
+//   an.SetStructuralMatrix(*matsp);
+//   int64_t neq = cmesh->NEquations();
+//   std::cout << "Number of equation = " << neq << std::endl;
+
+//   TPZStepSolver<STATE> step;
+//   step.SetDirect(ECholesky); // direct solver
+//   an.SetSolver(step);
+
+//   if (solverType == ESkyline) {
+//     an.Run(); // assembles and solves the linear system
+//   } else {
+//     if (neq > 20000) {
+//       TPZSimpleTimer t("Time for assembly", true);
+//       an.Assemble();
+//     } else {
+//       an.Assemble();
+//     }
+
+//     if (neq > 20000) {
+//       std::cout << "Entering Solve\n";
+//       std::cout.flush();
+//     }
+
+//     auto mCast = an.MatrixSolver<STATE>().Matrix();
+//     mCast->SetDefPositive(true);
+
+//     if (neq > 20000) {
+//       TPZSimpleTimer t("Time for solve", true);
+//       an.Solve();
+//     } else {
+//       an.Solve();
+//     }
+//   }
+
+//   print = false;
+//   if (print) an.Solution().Print("Solution");
+
+//   // Post-processing the results
+//   const std::string plotfile = "postproc"; // without extension
+//   constexpr int vtkRes(0);                 // 0 for no refinement
+
+//   TPZManVector<std::string, 2> fields = {"Flux", "Pressure"};
+//   auto vtk = TPZVTKGenerator(cmesh, fields, plotfile, vtkRes);
+
+//   vtk.Do();
+
+//   return 0;
+// }

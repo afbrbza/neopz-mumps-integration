@@ -7,7 +7,7 @@ find_package(NeoPZ REQUIRED HINTS ${CMAKE_SOURCE_DIR}/../neopz_install/ ${CMAKE_
 
 add_executable(firsttest main.cpp)
 #############################################################################################################
-target_link_libraries(firsttest PRIVATE NeoPZ::pz MKL::mkl_intel_ilp64 MKL::mkl_intel_thread MKL::mkl_core)
+target_link_libraries(firsttest PRIVATE NeoPZ::pz MKL::mkl_intel_ilp64 MKL::mkl_intel_thread MKL::mkl_core -liomp5)
 target_compile_definitions(firsttest PRIVATE MKL_ILP64)
 #############################################################################################################
 # target_link_libraries(firsttest PRIVATE NeoPZ::pz -fsanitize=address)
