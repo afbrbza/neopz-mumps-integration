@@ -248,7 +248,7 @@ int main(int argc, char const *argv[]) {
     return result;
   };
 
-  const TPZVec<int> nElemsDiv{750};
+  const TPZVec<int> nElemsDiv{250};
   const TPZVec<int> POrds{1, 2, 3};
   int maxNumOfThreads = executeCommand("nproc --all").empty() ? 8 : std::stoi(executeCommand("nproc --all"));
   TPZVec<int> nThreadsSolver(maxNumOfThreads);
