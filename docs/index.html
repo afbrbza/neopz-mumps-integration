@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speedup Comparison</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        #chartContainer {
+            position: relative;
+            height: 500px;
+            margin-bottom: 30px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
+        }
+        .mumps { color: #e74c3c; }
+        .pardiso { color: #3498db; }
+        .legend-icon {
+            width: 20px;
+            height: 3px;
+            display: inline-block;
+            border-radius: 2px;
+        }
+        .mumps-icon { background: #e74c3c; }
+        .pardiso-icon { background: #3498db; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Solver Performance: Speedup Comparison</h1>
+        <p class="subtitle">MUMPS vs Pardiso - Parallel Scaling Analysis</p>
+        
+        <div id="chartContainer">
+            <canvas id="speedupChart"></canvas>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3><span class="legend-icon mumps-icon"></span>MUMPS Max Speedup</h3>
+                <div class="value mumps" id="mumpsMax">-</div>
+                <small>at <span id="mumpsMaxThreads">-</span> threads</small>
+            </div>
+            
+            <div class="stat-card">
+                <h3><span class="legend-icon pardiso-icon"></span>Pardiso Max Speedup</h3>
+                <div class="value pardiso" id="pardisoMax">-</div>
+                <small>at <span id="pardisoMaxThreads">-</span> threads</small>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Average MUMPS Speedup</h3>
+                <div class="value mumps" id="mumpsAvg">-</div>
+                <small>across all thread counts</small>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Average Pardiso Speedup</h3>
+                <div class="value pardiso" id="pardisoAvg">-</div>
+                <small>across all thread counts</small>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data
+        const data = [
+            {threads: 1, mumps: 1, pardiso: 1},
+            {threads: 2, mumps: 1.09297, pardiso: 1.13311},
+            {threads: 3, mumps: 1.26189, pardiso: 1.14455},
+            {threads: 4, mumps: 1.31943, pardiso: 1.10415},
+            {threads: 5, mumps: 1.26706, pardiso: 1.1157},
+            {threads: 6, mumps: 1.32342, pardiso: 1.11575},
+            {threads: 7, mumps: 1.34053, pardiso: 1.10395},
+            {threads: 8, mumps: 1.34684, pardiso: 1.15101},
+            {threads: 9, mumps: 1.43765, pardiso: 1.13854},
+            {threads: 10, mumps: 1.35963, pardiso: 1.15127},
+            {threads: 11, mumps: 1.44033, pardiso: 1.07698},
+            {threads: 12, mumps: 1.44565, pardiso: 1.10381},
+            {threads: 13, mumps: 1.395, pardiso: 1.13011},
+            {threads: 14, mumps: 1.33117, pardiso: 1.1324},
+            {threads: 15, mumps: 1.46108, pardiso: 1.04536},
+            {threads: 16, mumps: 1.14397, pardiso: 1.15692},
+            {threads: 17, mumps: 1.36812, pardiso: 1.07617},
+            {threads: 18, mumps: 1.33139, pardiso: 1.16982},
+            {threads: 19, mumps: 1.37299, pardiso: 1.14818},
+            {threads: 20, mumps: 1.0667, pardiso: 1.16468},
+            {threads: 21, mumps: 1.33621, pardiso: 1.0559},
+            {threads: 22, mumps: 1.40716, pardiso: 1.09306},
+            {threads: 23, mumps: 1.15706, pardiso: 1.14447},
+            {threads: 24, mumps: 1.32946, pardiso: 1.03833}
+        ];
+
+        // Calculate statistics
+        const mumpsMax = Math.max(...data.map(d => d.mumps));
+        const pardisoMax = Math.max(...data.map(d => d.pardiso));
+        const mumpsMaxThreads = data.find(d => d.mumps === mumpsMax).threads;
+        const pardisoMaxThreads = data.find(d => d.pardiso === pardisoMax).threads;
+        const mumpsAvg = (data.reduce((sum, d) => sum + d.mumps, 0) / data.length).toFixed(3);
+        const pardisoAvg = (data.reduce((sum, d) => sum + d.pardiso, 0) / data.length).toFixed(3);
+
+        // Update statistics
+        document.getElementById('mumpsMax').textContent = mumpsMax.toFixed(3);
+        document.getElementById('mumpsMaxThreads').textContent = mumpsMaxThreads;
+        document.getElementById('pardisoMax').textContent = pardisoMax.toFixed(3);
+        document.getElementById('pardisoMaxThreads').textContent = pardisoMaxThreads;
+        document.getElementById('mumpsAvg').textContent = mumpsAvg;
+        document.getElementById('pardisoAvg').textContent = pardisoAvg;
+
+        // Create chart
+        const ctx = document.getElementById('speedupChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.map(d => d.threads),
+                datasets: [
+                    {
+                        label: 'MUMPS',
+                        data: data.map(d => d.mumps),
+                        borderColor: '#e74c3c',
+                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        borderWidth: 3,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        pointBackgroundColor: '#e74c3c',
+                        tension: 0.3,
+                        fill: true
+                    },
+                    {
+                        label: 'Pardiso',
+                        data: data.map(d => d.pardiso),
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        borderWidth: 3,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        pointBackgroundColor: '#3498db',
+                        tension: 0.3,
+                        fill: true
+                    },
+                    {
+                        label: 'Linear Speedup (Ideal)',
+                        data: data.map(d => d.threads),
+                        borderColor: '#95a5a6',
+                        borderWidth: 2,
+                        borderDash: [10, 5],
+                        pointRadius: 0,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            padding: 20,
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: 'rgba(0,0,0,0.8)',
+                        titleFont: {
+                            size: 14
+                        },
+                        bodyFont: {
+                            size: 13
+                        },
+                        padding: 12,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.parsed.y.toFixed(3) + 'x';
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Number of Threads',
+                            font: {
+                                size: 16,
+                                weight: 'bold'
+                            },
+                            color: '#2c3e50'
+                        },
+                        grid: {
+                            color: 'rgba(0,0,0,0.05)'
+                        },
+                        ticks: {
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Speedup',
+                            font: {
+                                size: 16,
+                                weight: 'bold'
+                            },
+                            color: '#2c3e50'
+                        },
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0,0,0,0.05)'
+                        },
+                        ticks: {
+                            font: {
+                                size: 12
+                            },
+                            callback: function(value) {
+                                return value.toFixed(1) + 'x';
+                            }
+                        }
+                    }
+                },
+                interaction: {
+                    mode: 'nearest',
+                    axis: 'x',
+                    intersect: false
+                }
+            }
+        });
+    </script>
+</body>
+</html>
