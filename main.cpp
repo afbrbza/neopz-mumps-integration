@@ -165,10 +165,12 @@ int main(int argc, char const *argv[]) {
 
   enum Solvers { EPardiso,
                  EMumps };
-  const int nthreads = 0; // number of threads (0 = automatic)
+  const int nthreadsAssemble = 0; // number of threads (0 = automatic)
   auto auxExecSolvers = [&](Solvers solver,
                             TPZAutoPointer<TPZStructMatrixT<STATE>> &matsp,
-                            TPZAutoPointer<TPZCompMesh> &cmesh)
+                            TPZAutoPointer<TPZCompMesh> &cmesh,
+                            double &referenceSolveTime,
+                            int nthreads)
       -> map<string, double> {
     // var to save result of solver execution an return it
     map<string, double> result;
@@ -176,7 +178,7 @@ int main(int argc, char const *argv[]) {
     // ----- Create analysis object -----
     TPZLinearAnalysis an(cmesh);
 
-    matsp->SetNumThreads(nthreads); // number of threads
+    matsp->SetNumThreads(nthreadsAssemble); // number of threads
     an.SetStructuralMatrix(*matsp);
 
     TPZStepSolver<STATE> step;
@@ -218,6 +220,14 @@ int main(int argc, char const *argv[]) {
       }
       cout << "Seconds for solve: " << result["SolveTime_s"] << " s\n";
 
+      if (referenceSolveTime == 0.0 && nthreads == 1) {
+        referenceSolveTime = result["SolveTime_s"];
+        result["SpeedUP"] = 1.0;
+      } else {
+        result["SpeedUP"] = result["SolveTime_s"] > 0 ? ((referenceSolveTime ?: 0) / result["SolveTime_s"]) : 0;
+      }
+      cout << "SpeedUP 1/" << nthreads << ": " << result["SpeedUP"] << "\n";
+
       if (solver == EPardiso) {
         result["RealUsedThreadsSolve"] = mkl_get_max_threads();
         cout << "MKL threads used in solve: " << result["RealUsedThreadsSolve"] << "\n";
@@ -233,97 +243,119 @@ int main(int argc, char const *argv[]) {
       }
     }
 
+    // an.Solution().Print("Solution");
+
     return result;
   };
 
-  const TPZVec<int> nElemsDiv{150, 200};
+  const TPZVec<int> nElemsDiv{750};
   const TPZVec<int> POrds{1, 2, 3};
   int maxNumOfThreads = executeCommand("nproc --all").empty() ? 8 : std::stoi(executeCommand("nproc --all"));
   TPZVec<int> nThreadsSolver(maxNumOfThreads);
   iota(nThreadsSolver.begin(), nThreadsSolver.end(), 1);
-  // TPZVec<int> nThreadsSolver{9};
+  // TPZVec<int> nThreadsSolver{1, 4, 6, 8, 12};
 
   const bool isOutFile = true;
   std::ofstream csvFile("solver_performance_results.csv");
   std::ostream &resultsFile = isOutFile ? (std::ostream &)csvFile : std::cout;
-  resultsFile << "NumElementsPerDir,PolyOrder,NumEquations,Solver,NumSolverThreads,AssemblyTime_s,RealUsedThreadsAssembly,SolveTime_s,RealUsedThreadsSolve\n";
+  resultsFile << "NumElementsPerDir,PolyOrder,NumEquations,Solver,NumSolverThreads,AssemblyTime_s,RealUsedThreadsAssembly,SolveTime_s,RealUsedThreadsSolve,SpeedUP\n";
 
   // executeCommand("clear"); // clear console output
+  const bool execPardiso = true;
+  const bool execMumps = true;
+
+  double referenceSolveTimePardiso = 0.0;
+  double referenceSolveTimeMumps = 0.0;
+
   for (auto neldiv : nElemsDiv) {
     TPZAutoPointer<TPZGeoMesh> gmesh = createMeshWithGenGrid({neldiv, neldiv}, {0., 0.}, {2., 1.});
 
     for (auto pord : POrds) {
-      TPZAutoPointer<TPZCompMesh> cmesh = createCompMesh(gmesh.operator->(), pord);
+      // Create the original cmesh once per (neldiv, pord) combination
+      TPZAutoPointer<TPZCompMesh> cmesh_original = createCompMesh(gmesh.operator->(), pord);
 
-      int64_t neq = cmesh->NEquations();
+      int64_t neq = cmesh_original->NEquations();
 
       map<string, double> result;
-      for (auto nthreads : nThreadsSolver) {
-        // ===== PARDISO TEST =====
-        {
-          std::cout << "\n\nRunning for " << neldiv << " elements in each direction.\n";
-          std::cout << "  Polynomial order: " << pord << std::endl;
-          std::cout << "Number of equation = " << neq << std::endl;
-          std::cout << "\n=== Using Pardiso solver with " << nthreads << " threads ===\n";
+      if (execPardiso) {
+        for (auto nthreads : nThreadsSolver) {
+          // ===== PARDISO TEST =====
+          {
+            // Clone cmesh to avoid state conflicts between solvers
+            TPZAutoPointer<TPZCompMesh> cmesh(cmesh_original->Clone());
 
-          // Pardiso uses MKL, disable OpenBLAS to avoid conflicts
-          openblas_set_num_threads(1);
+            std::cout << "\n\nRunning for " << neldiv << " elements in each direction.\n";
+            std::cout << "  Polynomial order: " << pord << std::endl;
+            std::cout << "Number of equation = " << neq << std::endl;
+            std::cout << "\n=== Using Pardiso solver with " << nthreads << " threads ===\n";
 
-          // Disable MKL dynamic threading to force exact number of threads
-          mkl_set_dynamic(0);
+            // Pardiso uses MKL, disable OpenBLAS to avoid conflicts
+            openblas_set_num_threads(1);
 
-          // manual says that the number of threads should be set both for MKL and OpenMP
-          executeCommand("export OMP_NUM_THREADS=" + std::to_string(nthreads));
-          omp_set_num_threads(nthreads);
-          mkl_set_num_threads(nthreads);
+            // Disable MKL dynamic threading to force exact number of threads
+            mkl_set_dynamic(0);
 
-          // Also set domain-specific threads
-          mkl_domain_set_num_threads(nthreads, MKL_DOMAIN_ALL);
+            // manual says that the number of threads should be set both for MKL and OpenMP
+            executeCommand("export OMP_NUM_THREADS=" + std::to_string(nthreads));
+            omp_set_num_threads(nthreads);
+            mkl_set_num_threads(nthreads);
 
-          // Verify MKL settings
-          int mkl_max_threads = mkl_get_max_threads();
-          std::cout << "MKL max threads: " << mkl_max_threads << std::endl;
+            // Also set domain-specific threads
+            mkl_domain_set_num_threads(nthreads, MKL_DOMAIN_ALL);
 
-          TPZAutoPointer<TPZStructMatrixT<STATE>> matspPardiso =
-              new TPZSSpStructMatrix<STATE>(cmesh);
+            // Verify MKL settings
+            int mkl_max_threads = mkl_get_max_threads();
+            std::cout << "MKL max threads: " << mkl_max_threads << std::endl;
 
-          result = auxExecSolvers(EPardiso, matspPardiso, cmesh);
+            TPZAutoPointer<TPZStructMatrixT<STATE>> matspPardiso =
+                new TPZSSpStructMatrix<STATE>(cmesh);
+
+            result = auxExecSolvers(EPardiso, matspPardiso, cmesh, referenceSolveTimePardiso, nthreads);
+          }
+          resultsFile << neldiv << "," << pord << "," << neq << ",Pardiso," << nthreads << ","
+                      << result["AssemblyTime_s"] << "," << result["RealUsedThreadsAssembly"] << ","
+                      << result["SolveTime_s"] << "," << result["RealUsedThreadsSolve"]
+                      << "," << result["SpeedUP"] << "\n";
         }
-        resultsFile << neldiv << "," << pord << "," << neq << ",Pardiso," << nthreads << ","
-                    << result["AssemblyTime_s"] << "," << result["RealUsedThreadsAssembly"] << ","
-                    << result["SolveTime_s"] << "," << result["RealUsedThreadsSolve"] << "\n";
       }
 
-      for (auto nthreads : nThreadsSolver) {
-        // ===== MUMPS TEST =====
-        {
-          std::cout << "\n\nRunning for " << neldiv << " elements in each direction.\n";
-          std::cout << "  Polynomial order: " << pord << std::endl;
-          std::cout << "Number of equation = " << neq << std::endl;
-          std::cout << "\n=== Using MUMPS solver with " << nthreads << " threads ===\n";
+      if (execMumps) {
+        for (auto nthreads : nThreadsSolver) {
+          // ===== MUMPS TEST =====
+          {
+            // Clone cmesh to avoid state conflicts between solvers
+            TPZAutoPointer<TPZCompMesh> cmesh(cmesh_original->Clone());
 
-          // MUMPS uses OpenBLAS for BLAS operations + OpenMP for parallelism
-          mkl_set_num_threads(1); // Disable MKL to avoid conflicts
-          openblas_set_num_threads(nthreads);
-          omp_set_num_threads(nthreads);
+            std::cout << "\n\nRunning for " << neldiv << " elements in each direction.\n";
+            std::cout << "  Polynomial order: " << pord << std::endl;
+            std::cout << "Number of equation = " << neq << std::endl;
+            std::cout << "\n=== Using MUMPS solver with " << nthreads << " threads ===\n";
+
+            // MUMPS uses OpenBLAS for BLAS operations + OpenMP for parallelism
+            mkl_set_num_threads(1); // Disable MKL to avoid conflicts
+            openblas_set_num_threads(nthreads);
+            omp_set_num_threads(nthreads);
 
 // Verify OpenMP settings
 #pragma omp parallel
-          {
-#pragma omp master
             {
-              std::cout << "OpenMP threads: " << omp_get_num_threads() << std::endl;
+#pragma omp master
+              {
+                std::cout << "OpenMP threads: " << omp_get_num_threads() << std::endl;
+              }
             }
+
+            TPZAutoPointer<TPZStructMatrixT<STATE>> matspMumps =
+                new TPZSpStructMatrixMumps<STATE>(cmesh);
+
+            result = auxExecSolvers(EMumps, matspMumps, cmesh, referenceSolveTimeMumps, nthreads);
           }
-
-          TPZAutoPointer<TPZStructMatrixT<STATE>> matspMumps =
-              new TPZSpStructMatrix<STATE>(cmesh);
-
-          result = auxExecSolvers(EMumps, matspMumps, cmesh);
+          resultsFile << neldiv << "," << pord << "," << neq << ",MUMPS," << nthreads << ","
+                      << result["AssemblyTime_s"] << "," << result["RealUsedThreadsAssembly"] << ","
+                      << result["SolveTime_s"] << "," << result["RealUsedThreadsSolve"]
+                      << "," << result["SpeedUP"]
+                      << "\n";
         }
-        resultsFile << neldiv << "," << pord << "," << neq << ",MUMPS," << nthreads << ","
-                    << result["AssemblyTime_s"] << "," << result["RealUsedThreadsAssembly"] << ","
-                    << result["SolveTime_s"] << "," << result["RealUsedThreadsSolve"] << "\n";
       }
     }
   }
