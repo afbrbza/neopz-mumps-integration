@@ -5,7 +5,7 @@ sudo rm -rf /opt/mumps/*
 # ls -la /opt/mumps/
 rm -rf build
 sudo update
-sudo apt install -y libopenblas-dev liblapack-dev
+sudo apt install -y libopenblas-dev liblapack-dev gfortran cmake
 cmake -Bbuild \
     -DBUILD_DOUBLE=on \
     -DMUMPS_parallel=false \
