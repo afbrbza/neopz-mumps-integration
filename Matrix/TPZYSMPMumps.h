@@ -77,8 +77,21 @@ public :
   //! Gets reference to TPZMumpsSolver instance for fine-tuning
   TPZMumpsSolver<TVar> & GetMumpsControl()
   {return fMumpsControl;}
+  
+  //! Update COO format from CSR (called by StructMatrix during assembly)
+  void UpdateCOOFormat();
+  
+  //! Get COO format arrays (1-based indexing for MUMPS)
+  void GetCOOFormat(TPZVec<int64_t> &irn, TPZVec<int64_t> &jcn) const;
+  
 private:
+  
   TPZMumpsSolver<TVar> fMumpsControl;
+  
+  // COO format arrays (1-based indexing for MUMPS)
+  mutable TPZManVector<int64_t> fIRN1Based;
+  mutable TPZManVector<int64_t> fJCN1Based;
+  mutable bool fCOOValid{false};
 };
 
 #endif

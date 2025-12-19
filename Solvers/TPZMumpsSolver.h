@@ -89,10 +89,6 @@ protected:
 
   TPZManVector<long long, 64> fParam;
 
-  // Persistent storage for 1-based index arrays expected by MUMPS
-  TPZManVector<int64_t> fIRN1Based;
-  TPZManVector<int64_t> fJCN1Based;
-
   long long fMax_num_factors{1};
 
   long long fMatrix_num{1};

@@ -34,8 +34,6 @@ TPZMumpsSolver<TVar>::TPZMumpsSolver(TPZMumpsSolver &&copy) noexcept
       fProperty(copy.fProperty),
       fMumpsData(copy.fMumpsData),
       fParam(std::move(copy.fParam)),
-      fIRN1Based(std::move(copy.fIRN1Based)),
-      fJCN1Based(std::move(copy.fJCN1Based)),
       fMax_num_factors(copy.fMax_num_factors),
       fMatrix_num(copy.fMatrix_num),
       fMessageLevel(copy.fMessageLevel),
@@ -64,8 +62,6 @@ TPZMumpsSolver<TVar>& TPZMumpsSolver<TVar>::operator=(TPZMumpsSolver &&copy) noe
     fProperty = copy.fProperty;
     fMumpsData = copy.fMumpsData;
     fParam = std::move(copy.fParam);
-    fIRN1Based = std::move(copy.fIRN1Based);
-    fJCN1Based = std::move(copy.fJCN1Based);
     fMax_num_factors = copy.fMax_num_factors;
     fMatrix_num = copy.fMatrix_num;
     fMessageLevel = copy.fMessageLevel;
@@ -214,38 +210,22 @@ void TPZMumpsSolver<TVar>::Decompose(TPZMatrix<TVar> *mat) {
       DebugStop();
     }
     fMumpsInitialized = true;
-  } else {
   }
 
   long long nnz = (symSystem) ? symSystem->fA.size() : nSymSystem->fA.size();
 
-  // MUMPS uses COO (Coordinate) format, but TPZSYsmpMatrix uses CSR format
-  // Need to convert CSR (ia, ja) to COO (irn, jcn)
-  
-  fIRN1Based.Resize(nnz);
-  fJCN1Based.Resize(nnz);
-  
-  // Convert CSR to COO format
-  long long k = 0;
-  for (long long i = 0; i < n; i++) {
-    const long long row_start = ia[i];
-    const long long row_end = ia[i + 1];
-    for (long long pos = row_start; pos < row_end; pos++) {
-      fIRN1Based[k] = static_cast<int>(i + 1);  // MUMPS uses 1-based indexing
-      fJCN1Based[k] = static_cast<int>(ja[pos] + 1);  // MUMPS uses 1-based indexing
-      k++;
-    }
-  }
-  
-  if (k != nnz) {
-    std::cerr << "ERROR: CSR to COO conversion mismatch: k=" << k << " nnz=" << nnz << std::endl;
-    DebugStop();
+  // Get COO format from matrix (conversion done once in matrix class)
+  TPZVec<int64_t> irn, jcn;
+  if (symSystem) {
+    symSystem->GetCOOFormat(irn, jcn);
+  } else {
+    nSymSystem->GetCOOFormat(irn, jcn);
   }
 
   fMumpsData.n = n;
   fMumpsData.nz = nnz;
-  fMumpsData.irn = fIRN1Based.begin();
-  fMumpsData.jcn = fJCN1Based.begin();
+  fMumpsData.irn = irn.begin();
+  fMumpsData.jcn = jcn.begin();
   fMumpsData.a = reinterpret_cast<DMUMPS_REAL *>(a);
 
   // Set MUMPS control parameters

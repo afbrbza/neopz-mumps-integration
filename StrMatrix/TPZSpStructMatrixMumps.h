@@ -13,12 +13,15 @@
  * @brief Implements a sparse structural matrix using TPZFYsmpMatrix as a storage format.
  * @ingroup structural
  */
-template <class TVar=STATE, class TPar=TPZStructMatrixOR<TVar>>
+template <class TVar = STATE, class TPar = TPZStructMatrixOR<TVar>>
 class TPZSpStructMatrixMumps : public TPZSpStructMatrix<TVar, TPar> {
 public:
   using TPZSpStructMatrix<TVar, TPar>::TPZSpStructMatrix;
 
 protected:
+  // Override SetupMatrixData if you need custom MUMPS behavior
+  virtual TPZMatrix<TVar> *Create() override;
+  virtual TPZSpStructMatrixMumps *Clone() override;
   virtual TPZMatrix<TVar> *SetupMatrixData(TPZStack<int64_t> &elgraph, TPZVec<int64_t> &elgraphindex);
   friend TPZPersistenceManager;
 };

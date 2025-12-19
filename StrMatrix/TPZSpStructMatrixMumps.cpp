@@ -20,6 +20,32 @@ static TPZLogger logger("pz.StrMatrix");
 using namespace std;
 
 template<class TVar, class TPar>
+TPZSpStructMatrixMumps<TVar, TPar> * TPZSpStructMatrixMumps<TVar,TPar>::Clone(){
+    return new TPZSpStructMatrixMumps(*this);
+}
+
+template <class TVar, class TPar>
+TPZMatrix<TVar> *TPZSpStructMatrixMumps<TVar, TPar>::Create() {
+  int64_t neq = this->fMesh->NEquations();
+
+  // if(this->fMesh->FatherMesh()) {
+  //		cout << "TPZSSpStructMatrix should not be called with CreateAssemble for a substructure mesh\n";
+  //        DebugStop(); // WHY?
+  // }
+
+  /**
+   *Longhin implementation
+   */
+  TPZStack<int64_t> elgraph;
+  TPZVec<int64_t> elgraphindex;
+  //    int nnodes = 0;
+  this->fMesh->ComputeElGraph(elgraph, elgraphindex);
+
+  TPZMatrix<TVar> *mat = SetupMatrixData(elgraph, elgraphindex);
+  return mat;
+}
+
+template<class TVar, class TPar>
 TPZMatrix<TVar> *
 TPZSpStructMatrixMumps<TVar,TPar>::SetupMatrixData(TPZStack<int64_t> & elgraph,
                                               TPZVec<int64_t> &elgraphindex){
@@ -156,6 +182,10 @@ TPZSpStructMatrixMumps<TVar,TPar>::SetupMatrixData(TPZStack<int64_t> & elgraph,
         DebugStop();
     }
     mat->SetData(std::move(Eq),std::move(EqCol),std::move(EqValue));
+    
+    // Prepare COO format for MUMPS during assembly phase
+    mat->UpdateCOOFormat();
+    
     return mat;
 }
 

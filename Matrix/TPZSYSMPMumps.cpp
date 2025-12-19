@@ -27,16 +27,22 @@ TPZSYsmpMatrixMumps<TVar>::TPZSYsmpMatrixMumps() :
 template<class TVar>
 TPZSYsmpMatrixMumps<TVar>::TPZSYsmpMatrixMumps(const TPZSYsmpMatrixMumps<TVar> &cp) :
     TPZRegisterClassId(&TPZSYsmpMatrixMumps::ClassId),
-    TPZSYsmpMatrix<TVar>(cp) {
+    TPZSYsmpMatrix<TVar>(cp),
+    fCOOValid(false) {
     // Note: fMumpsControl is NOT copied - each matrix gets a fresh MUMPS instance
     // The copied matrix will need to be decomposed again if needed
+    // COO format will be recomputed when needed
 }
 
 template<class TVar>
 TPZSYsmpMatrixMumps<TVar>::TPZSYsmpMatrixMumps(TPZSYsmpMatrixMumps<TVar> &&cp) :
     TPZRegisterClassId(&TPZSYsmpMatrixMumps::ClassId),
     TPZSYsmpMatrix<TVar>(std::move(cp)),
-    fMumpsControl(std::move(cp.fMumpsControl)) {
+    fMumpsControl(std::move(cp.fMumpsControl)),
+    fIRN1Based(std::move(cp.fIRN1Based)),
+    fJCN1Based(std::move(cp.fJCN1Based)),
+    fCOOValid(cp.fCOOValid) {
+    cp.fCOOValid = false;
 }
 
 template<class TVar>
@@ -47,6 +53,7 @@ TPZSYsmpMatrixMumps<TVar>& TPZSYsmpMatrixMumps<TVar>::operator=(const TPZSYsmpMa
         fMumpsControl = TPZMumpsSolver<TVar>();
         // Reset decomposition state since we have a new MUMPS instance
         this->SetIsDecomposed(ENoDecompose);
+        fCOOValid = false;
     }
     return *this;
 }
@@ -56,6 +63,10 @@ TPZSYsmpMatrixMumps<TVar>& TPZSYsmpMatrixMumps<TVar>::operator=(TPZSYsmpMatrixMu
     if (this != &copy) {
         TPZSYsmpMatrix<TVar>::operator=(std::move(copy));
         fMumpsControl = std::move(copy.fMumpsControl);
+        fIRN1Based = std::move(copy.fIRN1Based);
+        fJCN1Based = std::move(copy.fJCN1Based);
+        fCOOValid = copy.fCOOValid;
+        copy.fCOOValid = false;
     }
     return *this;
 }
@@ -107,6 +118,10 @@ void TPZSYsmpMatrixMumps<TVar>::MultAdd(const TPZFMatrix<TVar> &x,
 template<class TVar>
 void TPZSYsmpMatrixMumps<TVar>::SetIsDecomposed(DecomposeType val) {
     TPZBaseMatrix::SetIsDecomposed(val);
+    if (val == ENoDecompose) {
+        // Matrix may have been modified, invalidate COO format
+        fCOOValid = false;
+    }
     if (val) {
         fMumpsControl.fDecomposed = true;
     }
@@ -192,9 +207,51 @@ template class TPZSYsmpMatrixMumps<double>;
 template class TPZSYsmpMatrixMumps<float>;
 template class TPZSYsmpMatrixMumps<std::complex<float>>;
 template class TPZSYsmpMatrixMumps<std::complex<double>>;
+template class TPZSYsmpMatrixMumps<long double>;
+template class TPZSYsmpMatrixMumps<std::complex<long double>>;
 
-// If you need long double support (MUMPS doesn't support it natively)
-// template class TPZSYsmpMatrixMumps<long double>;
-// template class TPZSYsmpMatrixMumps<std::complex<long double>>;
+template<class TVar>
+void TPZSYsmpMatrixMumps<TVar>::UpdateCOOFormat() {
+    const long long n = this->Rows();
+    const long long nnz = this->fA.size();
+    
+    fIRN1Based.Resize(nnz);
+    fJCN1Based.Resize(nnz);
+    
+    // Convert CSR to COO format
+    long long k = 0;
+    for (long long i = 0; i < n; i++) {
+        const long long row_start = this->fIA[i];
+        const long long row_end = this->fIA[i + 1];
+        for (long long pos = row_start; pos < row_end; pos++) {
+            fIRN1Based[k] = static_cast<int64_t>(i + 1);  // MUMPS uses 1-based indexing
+            fJCN1Based[k] = static_cast<int64_t>(this->fJA[pos] + 1);  // MUMPS uses 1-based indexing
+            k++;
+        }
+    }
+    
+    if (k != nnz) {
+        std::cerr << "ERROR: CSR to COO conversion mismatch: k=" << k << " nnz=" << nnz << std::endl;
+        DebugStop();
+    }
+    
+    fCOOValid = true;
+}
+
+template<class TVar>
+void TPZSYsmpMatrixMumps<TVar>::GetCOOFormat(TPZVec<int64_t> &irn, TPZVec<int64_t> &jcn) const {
+    if (!fCOOValid) {
+        const_cast<TPZSYsmpMatrixMumps<TVar>*>(this)->UpdateCOOFormat();
+    }
+    irn = fIRN1Based;
+    jcn = fJCN1Based;
+}
+
+// Note: long double instantiations for completeness, even though MUMPS
+// doesn't natively support long double (uses double precision internally)
+template void TPZSYsmpMatrixMumps<long double>::UpdateCOOFormat();
+template void TPZSYsmpMatrixMumps<long double>::GetCOOFormat(TPZVec<int64_t>&, TPZVec<int64_t>&) const;
+template void TPZSYsmpMatrixMumps<std::complex<long double>>::UpdateCOOFormat();
+template void TPZSYsmpMatrixMumps<std::complex<long double>>::GetCOOFormat(TPZVec<int64_t>&, TPZVec<int64_t>&) const;
 
 // #endif // USING_MUMPS

@@ -191,6 +191,10 @@ TPZMatrix<TVar> *TPZSSpStructMatrixMumps<TVar, TPar>::SetupMatrixData(
 
   Eq[ieq] = pos;
   mat->SetData(std::move(Eq), std::move(EqCol), std::move(EqValue));
+  
+  // Prepare COO format for MUMPS during assembly phase
+  mat->UpdateCOOFormat();
+  
   return mat;
 }
 
