@@ -220,7 +220,7 @@ int main(int argc, char const *argv[]) {
       }
       cout << "Seconds for solve: " << result["SolveTime_s"] << " s\n";
 
-      if (referenceSolveTime == 0.0 && nthreads == 1) {
+      if (nthreads == 1) {
         referenceSolveTime = result["SolveTime_s"];
         result["SpeedUP"] = 1.0;
       } else {
