@@ -185,26 +185,25 @@ int main(int argc, char const *argv[]) {
     step.SetDirect(ECholesky); // direct solver
     an.SetSolver(step);
 
+    double assemblyTime = 0;
     {
-      {
-        TPZSimpleTimer t("Time for assembly", true);
-        an.Assemble();
-        result["AssemblyTime_s"] = t.ReturnTimeDouble() / 1000;
-      }
+      TPZSimpleTimer t("Time for assembly", true);
+      an.Assemble();
+      assemblyTime = t.ReturnTimeDouble() / 1000;
+      result["AssemblyTime_s"] = assemblyTime;
+    }
+    cout << "Seconds for assembly: " << result["AssemblyTime_s"] << " s\n";
 
-      cout << "Seconds for assembly: " << result["AssemblyTime_s"] << " s\n";
-
-      if (solver == EPardiso) {
-        result["RealUsedThreadsAssembly"] = mkl_get_max_threads();
-        cout << "MKL threads used in assembly: " << result["RealUsedThreadsAssembly"] << "\n";
-      } else if (solver == EMumps) {
+    if (solver == EPardiso) {
+      result["RealUsedThreadsAssembly"] = mkl_get_max_threads();
+      cout << "MKL threads used in assembly: " << result["RealUsedThreadsAssembly"] << "\n";
+    } else if (solver == EMumps) {
 #pragma omp parallel
-        {
+      {
 #pragma omp master
-          {
-            result["RealUsedThreadsAssembly"] = omp_get_num_threads();
-            cout << "OpenMP threads used in assembly: " << result["RealUsedThreadsAssembly"] << "\n";
-          }
+        {
+          result["RealUsedThreadsAssembly"] = omp_get_num_threads();
+          cout << "OpenMP threads used in assembly: " << result["RealUsedThreadsAssembly"] << "\n";
         }
       }
     }
@@ -212,48 +211,50 @@ int main(int argc, char const *argv[]) {
     auto mCast = an.MatrixSolver<STATE>().Matrix();
     mCast->SetDefPositive(true);
 
+    // Solve with timing
+    double solveTime = 0;
     {
-      {
-        TPZSimpleTimer t("Time for solve", true);
-        an.Solve();
-        result["SolveTime_s"] = t.ReturnTimeDouble() / 1000;
-      }
-      cout << "Seconds for solve: " << result["SolveTime_s"] << " s\n";
+      TPZSimpleTimer t("Time for solve", true);
+      an.Solve();
+      solveTime = t.ReturnTimeDouble() / 1000;
+      result["SolveTime_s"] = solveTime;
+    }
+    cout << "Seconds for solve: " << result["SolveTime_s"] << " s\n";
 
-      if (nthreads == 1) {
-        referenceSolveTime = result["SolveTime_s"];
-        result["SpeedUP"] = 1.0;
-      } else {
-        result["SpeedUP"] = result["SolveTime_s"] > 0 ? ((referenceSolveTime ?: 0) / result["SolveTime_s"]) : 0;
-      }
-      cout << "SpeedUP 1/" << nthreads << ": " << result["SpeedUP"] << "\n";
+    if (nthreads == 1) {
+      referenceSolveTime = result["SolveTime_s"];
+      result["SpeedUP"] = 1.0;
+    } else {
+      result["SpeedUP"] = result["SolveTime_s"] > 0 ? ((referenceSolveTime ?: 0) / result["SolveTime_s"]) : 0;
+    }
+    cout << "SpeedUP 1/" << nthreads << ": " << result["SpeedUP"] << "\n";
 
-      if (solver == EPardiso) {
-        result["RealUsedThreadsSolve"] = mkl_get_max_threads();
-        cout << "MKL threads used in solve: " << result["RealUsedThreadsSolve"] << "\n";
-      } else if (solver == EMumps) {
+    if (solver == EPardiso) {
+      result["RealUsedThreadsSolve"] = mkl_get_max_threads();
+      cout << "MKL threads used in solve: " << result["RealUsedThreadsSolve"] << "\n";
+    } else if (solver == EMumps) {
 #pragma omp parallel
-        {
+      {
 #pragma omp master
-          {
-            result["RealUsedThreadsSolve"] = omp_get_num_threads();
-            cout << "OpenMP threads used in solve: " << result["RealUsedThreadsSolve"] << "\n";
-          }
+        {
+          result["RealUsedThreadsSolve"] = omp_get_num_threads();
+          cout << "OpenMP threads used in solve: " << result["RealUsedThreadsSolve"] << "\n";
         }
       }
     }
 
-    // an.Solution().Print("Solution");
-
     return result;
   };
 
-  const TPZVec<int> nElemsDiv{250};
-  const TPZVec<int> POrds{1, 2, 3};
-  int maxNumOfThreads = executeCommand("nproc --all").empty() ? 8 : std::stoi(executeCommand("nproc --all"));
-  TPZVec<int> nThreadsSolver(maxNumOfThreads);
-  iota(nThreadsSolver.begin(), nThreadsSolver.end(), 1);
-  // TPZVec<int> nThreadsSolver{1, 4, 6, 8, 12};
+  const TPZVec<int> nElemsDiv{750};
+  const TPZVec<int> POrds{2};
+  /* ************************************************************ */
+  // int maxNumOfThreads = executeCommand("nproc --all").empty() ? 8 : std::stoi(executeCommand("nproc --all"));
+  // TPZVec<int> nThreadsSolver(maxNumOfThreads);
+  // iota(nThreadsSolver.begin(), nThreadsSolver.end(), 1);
+  /* ************************************************************ */
+  TPZVec<int> nThreadsSolver{1, 6, 12};
+  /* ************************************************************ */
 
   const bool isOutFile = true;
   std::ofstream csvFile("solver_performance_results.csv");
@@ -295,8 +296,7 @@ int main(int argc, char const *argv[]) {
             // Disable MKL dynamic threading to force exact number of threads
             mkl_set_dynamic(0);
 
-            // manual says that the number of threads should be set both for MKL and OpenMP
-            executeCommand("export OMP_NUM_THREADS=" + std::to_string(nthreads));
+            // Set number of threads for MKL and OpenMP
             omp_set_num_threads(nthreads);
             mkl_set_num_threads(nthreads);
 
