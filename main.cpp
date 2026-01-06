@@ -210,6 +210,11 @@ int main(int argc, char const *argv[]) {
         result["AssemblyTime_s"] = assemblyTimeLocal;
       }
       cout << "Seconds for assembly: " << result["AssemblyTime_s"] << " s\n";
+      
+      // Force cleanup of threads after assembly
+      if (solver == EPardiso) {
+        mkl_free_buffers();
+      }
     } else {
       result["AssemblyTime_s"] = assemblyTime;
       cout << "Reusing assembly from first iteration\n";
@@ -352,6 +357,11 @@ int main(int argc, char const *argv[]) {
                       << result["SolveTime_s"] << "," << result["RealUsedThreadsSolve"]
                       << "," << result["SpeedUP"] << "\n";
         }
+        
+        // Force cleanup of MKL threads after Pardiso is done
+        mkl_set_num_threads(1);
+        mkl_free_buffers();
+        std::cout << "\n=== MKL threads cleaned up after Pardiso ===\n" << std::endl;
       }
 
       if (execMumps) {
@@ -405,6 +415,11 @@ int main(int argc, char const *argv[]) {
                       << "," << result["SpeedUP"]
                       << "\n";
         }
+        
+        // Force cleanup of OpenMP/OpenBLAS threads after MUMPS is done
+        omp_set_num_threads(1);
+        openblas_set_num_threads(1);
+        std::cout << "\n=== OpenMP/OpenBLAS threads cleaned up after MUMPS ===\n" << std::endl;
       }
     }
   }
