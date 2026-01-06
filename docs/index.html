@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,26 +14,30 @@
             min-height: 100vh;
             margin: 0;
         }
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
             background: white;
             padding: 30px;
             border-radius: 15px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
         }
+
         h1 {
             text-align: center;
             color: #2c3e50;
             margin-bottom: 10px;
             font-size: 28px;
         }
+
         .subtitle {
             text-align: center;
             color: #7f8c8d;
             margin-bottom: 20px;
             font-size: 14px;
         }
+
         .filter-container {
             text-align: center;
             margin-bottom: 30px;
@@ -41,11 +46,13 @@
             border-radius: 10px;
             border: 1px solid #eee;
         }
+
         .filter-container label {
             font-weight: bold;
             color: #2c3e50;
             margin-right: 10px;
         }
+
         #eqFilter {
             padding: 8px 15px;
             border-radius: 5px;
@@ -54,23 +61,27 @@
             font-size: 14px;
             cursor: pointer;
         }
+
         #chartContainer {
             position: relative;
             height: 500px;
             margin-bottom: 30px;
         }
+
         .stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 20px;
             margin-top: 30px;
         }
+
         .stat-card {
             background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+
         .stat-card h3 {
             margin: 0 0 10px 0;
             color: #2c3e50;
@@ -79,60 +90,76 @@
             align-items: center;
             gap: 8px;
         }
+
         .stat-card .value {
             font-size: 24px;
             font-weight: bold;
             color: #3498db;
         }
-        .mumps { color: #e74c3c; }
-        .pardiso { color: #3498db; }
+
+        .mumps {
+            color: #e74c3c;
+        }
+
+        .pardiso {
+            color: #3498db;
+        }
+
         .legend-icon {
             width: 20px;
             height: 3px;
             display: inline-block;
             border-radius: 2px;
         }
-        .mumps-icon { background: #e74c3c; }
-        .pardiso-icon { background: #3498db; }
+
+        .mumps-icon {
+            background: #e74c3c;
+        }
+
+        .pardiso-icon {
+            background: #3498db;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>Solver Performance: Speedup Comparison</h1>
         <p class="subtitle">MUMPS vs Pardiso - Parallel Scaling Analysis</p>
-        
+
         <div class="filter-container">
-            <label for="eqFilter">Selecione o Número de Equações:</label>
+            <label for="eqFilter">Select Equation Set:</label>
             <select id="eqFilter">
-                <option value="63001">63.001 (PolyOrder 1)</option>
+                <option value="" selected>Loading....</option>
+                <!-- <option value="63001">63.001 (PolyOrder 1)</option>
                 <option value="251001">251.001 (PolyOrder 2)</option>
-                <option value="564001" selected>564.001 (PolyOrder 3)</option>
+                <option value="564001" selected>564.001 (PolyOrder 3)</option> -->
             </select>
         </div>
 
         <div id="chartContainer">
             <canvas id="speedupChart"></canvas>
         </div>
-        
+
         <div class="stats">
             <div class="stat-card">
                 <h3><span class="legend-icon mumps-icon"></span>MUMPS Max Speedup</h3>
                 <div class="value mumps" id="mumpsMax">-</div>
                 <small>at <span id="mumpsMaxThreads">-</span> threads</small>
             </div>
-            
+
             <div class="stat-card">
                 <h3><span class="legend-icon pardiso-icon"></span>Pardiso Max Speedup</h3>
                 <div class="value pardiso" id="pardisoMax">-</div>
                 <small>at <span id="pardisoMaxThreads">-</span> threads</small>
             </div>
-            
+
             <div class="stat-card">
                 <h3>Average MUMPS Speedup</h3>
                 <div class="value mumps" id="mumpsAvg">-</div>
                 <small>across all thread counts</small>
             </div>
-            
+
             <div class="stat-card">
                 <h3>Average Pardiso Speedup</h3>
                 <div class="value pardiso" id="pardisoAvg">-</div>
@@ -142,177 +169,238 @@
     </div>
 
     <script>
-        // Dados extraídos do arquivo solver_performance_results.csv
-        const fullDataset = {
-            "63001": [
-                {threads: 1, mumps: 1, pardiso: 1},
-                {threads: 2, mumps: 1.04243, pardiso: 1.03839},
-                {threads: 3, mumps: 1.07879, pardiso: 1.03008},
-                {threads: 4, mumps: 1.07995, pardiso: 1.08507},
-                {threads: 5, mumps: 0.921545, pardiso: 1.07188},
-                {threads: 6, mumps: 1.17752, pardiso: 1.07026},
-                {threads: 7, mumps: 1.15255, pardiso: 1.04734},
-                {threads: 8, mumps: 1.18241, pardiso: 1.06793},
-                {threads: 9, mumps: 1.07619, pardiso: 0.870455},
-                {threads: 10, mumps: 0.860685, pardiso: 1.04709},
-                {threads: 11, mumps: 0.978327, pardiso: 0.914131},
-                {threads: 12, mumps: 0.959756, pardiso: 0.792788},
-                {threads: 13, mumps: 1.16338, pardiso: 1.00492},
-                {threads: 14, mumps: 1.1423, pardiso: 0.971423},
-                {threads: 15, mumps: 1.04704, pardiso: 0.989242},
-                {threads: 16, mumps: 1.0221, pardiso: 0.921558},
-                {threads: 17, mumps: 1.10608, pardiso: 0.45985},
-                {threads: 18, mumps: 1.1044, pardiso: 0.886701},
-                {threads: 19, mumps: 1.09122, pardiso: 0.978483},
-                {threads: 20, mumps: 1.00377, pardiso: 0.870938},
-                {threads: 21, mumps: 1.06693, pardiso: 0.821254},
-                {threads: 22, mumps: 1.06396, pardiso: 0.9036},
-                {threads: 23, mumps: 0.995853, pardiso: 0.834457},
-                {threads: 24, mumps: 0.968708, pardiso: 0.889599}
-            ],
-            "251001": [
-                {threads: 1, mumps: 1, pardiso: 1},
-                {threads: 2, mumps: 1.01344, pardiso: 1.07315},
-                {threads: 3, mumps: 1.14954, pardiso: 1.01963},
-                {threads: 4, mumps: 1.12024, pardiso: 1.12889},
-                {threads: 5, mumps: 1.11671, pardiso: 1.11669},
-                {threads: 6, mumps: 1.24939, pardiso: 1.14142},
-                {threads: 7, mumps: 1.25012, pardiso: 1.03218},
-                {threads: 8, mumps: 1.27392, pardiso: 1.12277},
-                {threads: 9, mumps: 1.24328, pardiso: 1.07827},
-                {threads: 10, mumps: 1.25558, pardiso: 1.04176},
-                {threads: 11, mumps: 1.21763, pardiso: 1.11673},
-                {threads: 12, mumps: 1.31408, pardiso: 1.11295},
-                {threads: 13, mumps: 1.30515, pardiso: 0.931871},
-                {threads: 14, mumps: 1.33169, pardiso: 1.06508},
-                {threads: 15, mumps: 1.27204, pardiso: 1.01686},
-                {threads: 16, mumps: 1.05492, pardiso: 0.993785},
-                {threads: 17, mumps: 1.30864, pardiso: 1.07937},
-                {threads: 18, mumps: 1.30862, pardiso: 1.08552},
-                {threads: 19, mumps: 1.0521, pardiso: 0.976967},
-                {threads: 20, mumps: 1.30129, pardiso: 1.09334},
-                {threads: 21, mumps: 1.13197, pardiso: 1.05694},
-                {threads: 22, mumps: 1.27084, pardiso: 0.918349},
-                {threads: 23, mumps: 1.25529, pardiso: 1.05103},
-                {threads: 24, mumps: 1.07622, pardiso: 1.06404}
-            ],
-            "564001": [
-                {threads: 1, mumps: 1, pardiso: 1},
-                {threads: 2, mumps: 1.09297, pardiso: 1.13311},
-                {threads: 3, mumps: 1.26189, pardiso: 1.14455},
-                {threads: 4, mumps: 1.31943, pardiso: 1.10415},
-                {threads: 5, mumps: 1.26706, pardiso: 1.1157},
-                {threads: 6, mumps: 1.32342, pardiso: 1.11575},
-                {threads: 7, mumps: 1.34053, pardiso: 1.10395},
-                {threads: 8, mumps: 1.34684, pardiso: 1.15101},
-                {threads: 9, mumps: 1.43765, pardiso: 1.13854},
-                {threads: 10, mumps: 1.35963, pardiso: 1.15127},
-                {threads: 11, mumps: 1.44033, pardiso: 1.07698},
-                {threads: 12, mumps: 1.44565, pardiso: 1.10381},
-                {threads: 13, mumps: 1.395, pardiso: 1.13011},
-                {threads: 14, mumps: 1.33117, pardiso: 1.1324},
-                {threads: 15, mumps: 1.46108, pardiso: 1.04536},
-                {threads: 16, mumps: 1.14397, pardiso: 1.15692},
-                {threads: 17, mumps: 1.36812, pardiso: 1.07617},
-                {threads: 18, mumps: 1.33139, pardiso: 1.16982},
-                {threads: 19, mumps: 1.37299, pardiso: 1.14818},
-                {threads: 20, mumps: 1.0667, pardiso: 1.16468},
-                {threads: 21, mumps: 1.33621, pardiso: 1.0559},
-                {threads: 22, mumps: 1.40716, pardiso: 1.09306},
-                {threads: 23, mumps: 1.15706, pardiso: 1.14447},
-                {threads: 24, mumps: 1.32946, pardiso: 1.03833}
-            ]
-        };
+        (async () => {
+            const res = await fetch('solver_performance_results.csv');
 
-        let speedupChart;
-        const ctx = document.getElementById('speedupChart').getContext('2d');
-        const filter = document.getElementById('eqFilter');
-
-        function updateDashboard(numEq) {
-            const data = fullDataset[numEq];
-
-            // Cálculo de estatísticas
-            const mumpsVals = data.map(d => d.mumps);
-            const pardisoVals = data.map(d => d.pardiso);
-
-            const mMax = Math.max(...mumpsVals);
-            const pMax = Math.max(...pardisoVals);
-            const mMaxT = data.find(d => d.mumps === mMax).threads;
-            const pMaxT = data.find(d => d.pardiso === pMax).threads;
-            const mAvg = (mumpsVals.reduce((a, b) => a + b, 0) / mumpsVals.length).toFixed(3);
-            const pAvg = (pardisoVals.reduce((a, b) => a + b, 0) / pardisoVals.length).toFixed(3);
-
-            // Atualização dos cards
-            document.getElementById('mumpsMax').textContent = mMax.toFixed(3);
-            document.getElementById('mumpsMaxThreads').textContent = mMaxT;
-            document.getElementById('pardisoMax').textContent = pMax.toFixed(3);
-            document.getElementById('pardisoMaxThreads').textContent = pMaxT;
-            document.getElementById('mumpsAvg').textContent = mAvg;
-            document.getElementById('pardisoAvg').textContent = pAvg;
-
-            // Atualização ou Criação do Gráfico
-            if (speedupChart) {
-                speedupChart.data.datasets[0].data = mumpsVals;
-                speedupChart.data.datasets[1].data = pardisoVals;
-                speedupChart.update();
-            } else {
-                speedupChart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: data.map(d => d.threads),
-                        datasets: [
-                            {
-                                label: 'MUMPS',
-                                data: mumpsVals,
-                                borderColor: '#e74c3c',
-                                backgroundColor: 'rgba(231, 76, 60, 0.1)',
-                                borderWidth: 3,
-                                pointRadius: 5,
-                                tension: 0.3,
-                                fill: true
-                            },
-                            {
-                                label: 'Pardiso',
-                                data: pardisoVals,
-                                borderColor: '#3498db',
-                                backgroundColor: 'rgba(52, 152, 219, 0.1)',
-                                borderWidth: 3,
-                                pointRadius: 5,
-                                tension: 0.3,
-                                fill: true
-                            },
-                            {
-                                label: 'Ideal Speedup',
-                                data: data.map(d => d.threads),
-                                borderColor: '#95a5a6',
-                                borderWidth: 2,
-                                borderDash: [10, 5],
-                                pointRadius: 0,
-                                fill: false
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { position: 'top' },
-                            tooltip: { mode: 'index', intersect: false }
-                        },
-                        scales: {
-                            x: { title: { display: true, text: 'Number of Threads' } },
-                            y: { title: { display: true, text: 'Speedup' }, beginAtZero: true }
-                        }
-                    }
-                });
+            if (!res.ok) {
+                console.error('Failed to load data file.');
+                return;
             }
-        }
 
-        // Listener para o filtro
-        filter.addEventListener('change', (e) => updateDashboard(e.target.value));
+            const csvText = await res.text();
 
-        // Inicialização com o valor padrão
-        updateDashboard(filter.value);
+            const eqFilter = document.getElementById('eqFilter');
+            const eqFilterOptions = {};
+
+            const fullDataset = {};
+            csvText.split('\n').forEach((line, i) => {
+                if (i == 0 || !line) return; // Skip header
+
+                const [
+                    NumElementsPerDir,
+                    PolyOrder,
+                    NumEquations,
+                    Solver,
+                    NumSolverThreads,
+                    AssemblyTime_s,
+                    RealUsedThreadsAssembly,
+                    SolveTime_s,
+                    RealUsedThreadsSolve,
+                    SpeedUP
+                ] = line.split(',');
+
+                const neqPoly = `${NumEquations}-${PolyOrder}`;
+                eqFilterOptions[neqPoly] = `${NumEquations.replace(/\B(?=(\d{3})+(?!\d))/g, '.')} (PolyOrder ${PolyOrder})`;
+
+                if (!fullDataset[neqPoly]) {
+                    fullDataset[neqPoly] = {};
+                }
+
+                const iNumSolverThreads = parseInt(NumSolverThreads);
+                if (!fullDataset[neqPoly][NumSolverThreads]) {
+                    fullDataset[neqPoly][NumSolverThreads] = {
+                        threads: NumSolverThreads,
+                        mumps: null,
+                        pardiso: null
+                    };
+                }
+
+                if (Solver === 'Pardiso') {
+                    fullDataset[neqPoly][iNumSolverThreads].pardiso = parseFloat(SpeedUP);
+                } else if (Solver === 'MUMPS') {
+                    fullDataset[neqPoly][iNumSolverThreads].mumps = parseFloat(SpeedUP);
+                }
+            });
+
+            eqFilter.innerHTML = '';
+            Object.entries(eqFilterOptions).forEach(([value, text]) => {
+                const option = new Option(text, value, false, false);
+                eqFilter.appendChild(option);
+            });
+
+            // Dados extraídos do arquivo solver_performance_results.csv
+            // const fullDataset = {
+            //     "63001": [
+            //         { threads: 1, mumps: 1, pardiso: 1 },
+            //         { threads: 2, mumps: 1.04243, pardiso: 1.03839 },
+            //         { threads: 3, mumps: 1.07879, pardiso: 1.03008 },
+            //         { threads: 4, mumps: 1.07995, pardiso: 1.08507 },
+            //         { threads: 5, mumps: 0.921545, pardiso: 1.07188 },
+            //         { threads: 6, mumps: 1.17752, pardiso: 1.07026 },
+            //         { threads: 7, mumps: 1.15255, pardiso: 1.04734 },
+            //         { threads: 8, mumps: 1.18241, pardiso: 1.06793 },
+            //         { threads: 9, mumps: 1.07619, pardiso: 0.870455 },
+            //         { threads: 10, mumps: 0.860685, pardiso: 1.04709 },
+            //         { threads: 11, mumps: 0.978327, pardiso: 0.914131 },
+            //         { threads: 12, mumps: 0.959756, pardiso: 0.792788 },
+            //         { threads: 13, mumps: 1.16338, pardiso: 1.00492 },
+            //         { threads: 14, mumps: 1.1423, pardiso: 0.971423 },
+            //         { threads: 15, mumps: 1.04704, pardiso: 0.989242 },
+            //         { threads: 16, mumps: 1.0221, pardiso: 0.921558 },
+            //         { threads: 17, mumps: 1.10608, pardiso: 0.45985 },
+            //         { threads: 18, mumps: 1.1044, pardiso: 0.886701 },
+            //         { threads: 19, mumps: 1.09122, pardiso: 0.978483 },
+            //         { threads: 20, mumps: 1.00377, pardiso: 0.870938 },
+            //         { threads: 21, mumps: 1.06693, pardiso: 0.821254 },
+            //         { threads: 22, mumps: 1.06396, pardiso: 0.9036 },
+            //         { threads: 23, mumps: 0.995853, pardiso: 0.834457 },
+            //         { threads: 24, mumps: 0.968708, pardiso: 0.889599 }
+            //     ],
+            //     "251001": [
+            //         { threads: 1, mumps: 1, pardiso: 1 },
+            //         { threads: 2, mumps: 1.01344, pardiso: 1.07315 },
+            //         { threads: 3, mumps: 1.14954, pardiso: 1.01963 },
+            //         { threads: 4, mumps: 1.12024, pardiso: 1.12889 },
+            //         { threads: 5, mumps: 1.11671, pardiso: 1.11669 },
+            //         { threads: 6, mumps: 1.24939, pardiso: 1.14142 },
+            //         { threads: 7, mumps: 1.25012, pardiso: 1.03218 },
+            //         { threads: 8, mumps: 1.27392, pardiso: 1.12277 },
+            //         { threads: 9, mumps: 1.24328, pardiso: 1.07827 },
+            //         { threads: 10, mumps: 1.25558, pardiso: 1.04176 },
+            //         { threads: 11, mumps: 1.21763, pardiso: 1.11673 },
+            //         { threads: 12, mumps: 1.31408, pardiso: 1.11295 },
+            //         { threads: 13, mumps: 1.30515, pardiso: 0.931871 },
+            //         { threads: 14, mumps: 1.33169, pardiso: 1.06508 },
+            //         { threads: 15, mumps: 1.27204, pardiso: 1.01686 },
+            //         { threads: 16, mumps: 1.05492, pardiso: 0.993785 },
+            //         { threads: 17, mumps: 1.30864, pardiso: 1.07937 },
+            //         { threads: 18, mumps: 1.30862, pardiso: 1.08552 },
+            //         { threads: 19, mumps: 1.0521, pardiso: 0.976967 },
+            //         { threads: 20, mumps: 1.30129, pardiso: 1.09334 },
+            //         { threads: 21, mumps: 1.13197, pardiso: 1.05694 },
+            //         { threads: 22, mumps: 1.27084, pardiso: 0.918349 },
+            //         { threads: 23, mumps: 1.25529, pardiso: 1.05103 },
+            //         { threads: 24, mumps: 1.07622, pardiso: 1.06404 }
+            //     ],
+            //     "564001": [
+            //         { threads: 1, mumps: 1, pardiso: 1 },
+            //         { threads: 2, mumps: 1.09297, pardiso: 1.13311 },
+            //         { threads: 3, mumps: 1.26189, pardiso: 1.14455 },
+            //         { threads: 4, mumps: 1.31943, pardiso: 1.10415 },
+            //         { threads: 5, mumps: 1.26706, pardiso: 1.1157 },
+            //         { threads: 6, mumps: 1.32342, pardiso: 1.11575 },
+            //         { threads: 7, mumps: 1.34053, pardiso: 1.10395 },
+            //         { threads: 8, mumps: 1.34684, pardiso: 1.15101 },
+            //         { threads: 9, mumps: 1.43765, pardiso: 1.13854 },
+            //         { threads: 10, mumps: 1.35963, pardiso: 1.15127 },
+            //         { threads: 11, mumps: 1.44033, pardiso: 1.07698 },
+            //         { threads: 12, mumps: 1.44565, pardiso: 1.10381 },
+            //         { threads: 13, mumps: 1.395, pardiso: 1.13011 },
+            //         { threads: 14, mumps: 1.33117, pardiso: 1.1324 },
+            //         { threads: 15, mumps: 1.46108, pardiso: 1.04536 },
+            //         { threads: 16, mumps: 1.14397, pardiso: 1.15692 },
+            //         { threads: 17, mumps: 1.36812, pardiso: 1.07617 },
+            //         { threads: 18, mumps: 1.33139, pardiso: 1.16982 },
+            //         { threads: 19, mumps: 1.37299, pardiso: 1.14818 },
+            //         { threads: 20, mumps: 1.0667, pardiso: 1.16468 },
+            //         { threads: 21, mumps: 1.33621, pardiso: 1.0559 },
+            //         { threads: 22, mumps: 1.40716, pardiso: 1.09306 },
+            //         { threads: 23, mumps: 1.15706, pardiso: 1.14447 },
+            //         { threads: 24, mumps: 1.32946, pardiso: 1.03833 }
+            //     ]
+            // };
+
+            let speedupChart;
+            const ctx = document.getElementById('speedupChart').getContext('2d');
+            const filter = document.getElementById('eqFilter');
+
+            function updateDashboard(numEq) {
+                const data = Object.values(fullDataset[numEq]);
+
+                // Cálculo de estatísticas
+                const mumpsVals = data.map(d => d.mumps);
+                const pardisoVals = data.map(d => d.pardiso);
+
+                const mMax = Math.max(...mumpsVals);
+                const pMax = Math.max(...pardisoVals);
+                const mMaxT = data.find(d => d.mumps === mMax).threads;
+                const pMaxT = data.find(d => d.pardiso === pMax).threads;
+                const mAvg = (mumpsVals.reduce((a, b) => a + b, 0) / mumpsVals.length).toFixed(3);
+                const pAvg = (pardisoVals.reduce((a, b) => a + b, 0) / pardisoVals.length).toFixed(3);
+
+                // Atualização dos cards
+                document.getElementById('mumpsMax').textContent = mMax.toFixed(3);
+                document.getElementById('mumpsMaxThreads').textContent = mMaxT;
+                document.getElementById('pardisoMax').textContent = pMax.toFixed(3);
+                document.getElementById('pardisoMaxThreads').textContent = pMaxT;
+                document.getElementById('mumpsAvg').textContent = mAvg;
+                document.getElementById('pardisoAvg').textContent = pAvg;
+
+                // Atualização ou Criação do Gráfico
+                if (speedupChart) {
+                    speedupChart.data.datasets[0].data = mumpsVals;
+                    speedupChart.data.datasets[1].data = pardisoVals;
+                    speedupChart.update();
+                } else {
+                    speedupChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.map(d => d.threads),
+                            datasets: [
+                                {
+                                    label: 'MUMPS',
+                                    data: mumpsVals,
+                                    borderColor: '#e74c3c',
+                                    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                                    borderWidth: 3,
+                                    pointRadius: 5,
+                                    tension: 0.3,
+                                    fill: true
+                                },
+                                {
+                                    label: 'Pardiso',
+                                    data: pardisoVals,
+                                    borderColor: '#3498db',
+                                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                                    borderWidth: 3,
+                                    pointRadius: 5,
+                                    tension: 0.3,
+                                    fill: true
+                                },
+                                {
+                                    label: 'Ideal Speedup',
+                                    data: data.map(d => d.threads),
+                                    borderColor: '#95a5a6',
+                                    borderWidth: 2,
+                                    borderDash: [10, 5],
+                                    pointRadius: 0,
+                                    fill: false
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'top' },
+                                tooltip: { mode: 'index', intersect: false }
+                            },
+                            scales: {
+                                x: { title: { display: true, text: 'Number of Threads' } },
+                                y: { title: { display: true, text: 'Speedup' }, beginAtZero: true }
+                            }
+                        }
+                    });
+                }
+            }
+
+            // Listener para o filtro
+            filter.addEventListener('change', (e) => updateDashboard(e.target.value));
+
+            // Inicialização com o valor padrão
+            updateDashboard(filter.value);
+        })();
     </script>
 </body>
+
 </html>
