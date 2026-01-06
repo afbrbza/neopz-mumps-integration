@@ -16,7 +16,7 @@ target_link_options(firsttest PRIVATE -fopenmp)
 #############################################################################################################
 # target_link_libraries(firsttest PRIVATE NeoPZ::pz -fsanitize=address)
 #############################################################################################################
-add_compile_options(-fsanitize=address -g)
+# add_compile_options(-fsanitize=address -g)
 
 add_subdirectory(Solvers)
 add_subdirectory(StrMatrix)

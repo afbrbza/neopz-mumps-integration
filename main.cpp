@@ -14,6 +14,7 @@
 #include <TPZGenGrid2D.h>
 #include <TPZGenGrid3D.h>
 #include <TPZLinearAnalysis.h>
+#include <TPZSloanRenumbering.h>
 #include <iostream>
 #include <mkl_service.h>
 #include <numeric>
@@ -142,6 +143,30 @@ TPZCompMesh *createCompMesh(TPZGeoMesh *gmesh, const int pord) {
 
   cmesh->AutoBuild(); // create the computational elements and connects
 
+  // Apply Sloan renumbering to reduce bandwidth
+  {
+    TPZSimpleTimer timer("Sloan Renumbering");
+    std::cout << "Applying Sloan renumbering to reduce bandwidth..." << std::endl;
+
+    TPZVec<int64_t> perm, iperm;
+    TPZSloanRenumbering sloan;
+    sloan.SetElementsNodes(cmesh->NElements(), cmesh->NConnects());
+
+    // Build element graph
+    TPZStack<int64_t> elgraph;
+    TPZVec<int64_t> elgraphindex;
+    cmesh->ComputeElGraph(elgraph, elgraphindex);
+    sloan.SetElementGraph(elgraph, elgraphindex);
+
+    // Perform reordering
+    sloan.Resequence(perm, iperm);
+
+    // Apply permutation to mesh
+    cmesh->Permute(perm);
+
+    std::cout << "Renumbering completed in " << timer.ReturnTimeDouble() / 1000.0 << " seconds" << std::endl;
+  }
+
   return cmesh;
 }
 
@@ -242,14 +267,14 @@ int main(int argc, char const *argv[]) {
     return result;
   };
 
-  const TPZVec<int> nElemsDiv{2};
+  const TPZVec<int> nElemsDiv{250};
   const TPZVec<int> POrds{2};
   /* ************************************************************ */
   // int maxNumOfThreads = executeCommand("nproc --all").empty() ? 8 : std::stoi(executeCommand("nproc --all"));
   // TPZVec<int> nThreadsSolver(maxNumOfThreads);
   // iota(nThreadsSolver.begin(), nThreadsSolver.end(), 1);
   /* ************************************************************ */
-  TPZVec<int> nThreadsSolver{12};
+  TPZVec<int> nThreadsSolver{1, 12};
   /* ************************************************************ */
 
   const bool isOutFile = true;
@@ -277,10 +302,10 @@ int main(int argc, char const *argv[]) {
       double pardisoAssemblyTime = 0.0;
       if (execPardiso) {
         bool firstIteration = true;
-        
+
         // Clone cmesh ONCE for all Pardiso iterations
         TPZAutoPointer<TPZCompMesh> cmesh(cmesh_original->Clone());
-        
+
         // Create analysis object ONCE for all Pardiso iterations
         TPZLinearAnalysis anPardiso(cmesh);
         TPZAutoPointer<TPZStructMatrixT<STATE>> matspPardiso =
@@ -290,7 +315,7 @@ int main(int argc, char const *argv[]) {
         TPZStepSolver<STATE> stepPardiso;
         stepPardiso.SetDirect(ECholesky);
         anPardiso.SetSolver(stepPardiso);
-        
+
         for (auto nthreads : nThreadsSolver) {
           // ===== PARDISO TEST =====
           {
@@ -332,10 +357,10 @@ int main(int argc, char const *argv[]) {
       if (execMumps) {
         bool firstIteration = true;
         double mumpsAssemblyTime = 0.0;
-        
+
         // Clone cmesh ONCE for all MUMPS iterations
         TPZAutoPointer<TPZCompMesh> cmesh(cmesh_original->Clone());
-        
+
         // Create analysis object ONCE for all MUMPS iterations
         TPZLinearAnalysis anMumps(cmesh);
         TPZAutoPointer<TPZStructMatrixT<STATE>> matspMumps =
@@ -345,7 +370,7 @@ int main(int argc, char const *argv[]) {
         TPZStepSolver<STATE> stepMumps;
         stepMumps.SetDirect(ECholesky);
         anMumps.SetSolver(stepMumps);
-        
+
         for (auto nthreads : nThreadsSolver) {
           // ===== MUMPS TEST =====
           {
