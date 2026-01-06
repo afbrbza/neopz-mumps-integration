@@ -167,32 +167,28 @@ int main(int argc, char const *argv[]) {
                  EMumps };
   const int nthreadsAssemble = 0; // number of threads (0 = automatic)
   auto auxExecSolvers = [&](Solvers solver,
-                            TPZAutoPointer<TPZStructMatrixT<STATE>> &matsp,
-                            TPZAutoPointer<TPZCompMesh> &cmesh,
+                            TPZLinearAnalysis &an,
                             double &referenceSolveTime,
-                            int nthreads)
+                            int nthreads,
+                            bool doAssemble = true,
+                            double assemblyTime = 0.0)
       -> map<string, double> {
     // var to save result of solver execution an return it
     map<string, double> result;
 
-    // ----- Create analysis object -----
-    TPZLinearAnalysis an(cmesh);
-
-    matsp->SetNumThreads(nthreadsAssemble); // number of threads
-    an.SetStructuralMatrix(*matsp);
-
-    TPZStepSolver<STATE> step;
-    step.SetDirect(ECholesky); // direct solver
-    an.SetSolver(step);
-
-    double assemblyTime = 0;
-    {
-      TPZSimpleTimer t("Time for assembly", true);
-      an.Assemble();
-      assemblyTime = t.ReturnTimeDouble() / 1000;
+    if (doAssemble) {
+      double assemblyTimeLocal = 0;
+      {
+        TPZSimpleTimer t("Time for assembly", true);
+        an.Assemble();
+        assemblyTimeLocal = t.ReturnTimeDouble() / 1000;
+        result["AssemblyTime_s"] = assemblyTimeLocal;
+      }
+      cout << "Seconds for assembly: " << result["AssemblyTime_s"] << " s\n";
+    } else {
       result["AssemblyTime_s"] = assemblyTime;
+      cout << "Reusing assembly from first iteration\n";
     }
-    cout << "Seconds for assembly: " << result["AssemblyTime_s"] << " s\n";
 
     if (solver == EPardiso) {
       result["RealUsedThreadsAssembly"] = mkl_get_max_threads();
@@ -246,7 +242,7 @@ int main(int argc, char const *argv[]) {
     return result;
   };
 
-  const TPZVec<int> nElemsDiv{750};
+  const TPZVec<int> nElemsDiv{2};
   const TPZVec<int> POrds{2};
   /* ************************************************************ */
   // int maxNumOfThreads = executeCommand("nproc --all").empty() ? 8 : std::stoi(executeCommand("nproc --all"));
@@ -278,13 +274,26 @@ int main(int argc, char const *argv[]) {
       int64_t neq = cmesh_original->NEquations();
 
       map<string, double> result;
+      double pardisoAssemblyTime = 0.0;
       if (execPardiso) {
+        bool firstIteration = true;
+        
+        // Clone cmesh ONCE for all Pardiso iterations
+        TPZAutoPointer<TPZCompMesh> cmesh(cmesh_original->Clone());
+        
+        // Create analysis object ONCE for all Pardiso iterations
+        TPZLinearAnalysis anPardiso(cmesh);
+        TPZAutoPointer<TPZStructMatrixT<STATE>> matspPardiso =
+            new TPZSSpStructMatrix<STATE>(cmesh);
+        matspPardiso->SetNumThreads(nthreadsAssemble);
+        anPardiso.SetStructuralMatrix(*matspPardiso);
+        TPZStepSolver<STATE> stepPardiso;
+        stepPardiso.SetDirect(ECholesky);
+        anPardiso.SetSolver(stepPardiso);
+        
         for (auto nthreads : nThreadsSolver) {
           // ===== PARDISO TEST =====
           {
-            // Clone cmesh to avoid state conflicts between solvers
-            TPZAutoPointer<TPZCompMesh> cmesh(cmesh_original->Clone());
-
             std::cout << "\n\nRunning for " << neldiv << " elements in each direction.\n";
             std::cout << "  Polynomial order: " << pord << std::endl;
             std::cout << "Number of equation = " << neq << std::endl;
@@ -307,10 +316,11 @@ int main(int argc, char const *argv[]) {
             int mkl_max_threads = mkl_get_max_threads();
             std::cout << "MKL max threads: " << mkl_max_threads << std::endl;
 
-            TPZAutoPointer<TPZStructMatrixT<STATE>> matspPardiso =
-                new TPZSSpStructMatrix<STATE>(cmesh);
-
-            result = auxExecSolvers(EPardiso, matspPardiso, cmesh, referenceSolveTimePardiso, nthreads);
+            result = auxExecSolvers(EPardiso, anPardiso, referenceSolveTimePardiso, nthreads, firstIteration, pardisoAssemblyTime);
+            if (firstIteration) {
+              pardisoAssemblyTime = result["AssemblyTime_s"];
+              firstIteration = false;
+            }
           }
           resultsFile << neldiv << "," << pord << "," << neq << ",Pardiso," << nthreads << ","
                       << result["AssemblyTime_s"] << "," << result["RealUsedThreadsAssembly"] << ","
@@ -320,12 +330,25 @@ int main(int argc, char const *argv[]) {
       }
 
       if (execMumps) {
+        bool firstIteration = true;
+        double mumpsAssemblyTime = 0.0;
+        
+        // Clone cmesh ONCE for all MUMPS iterations
+        TPZAutoPointer<TPZCompMesh> cmesh(cmesh_original->Clone());
+        
+        // Create analysis object ONCE for all MUMPS iterations
+        TPZLinearAnalysis anMumps(cmesh);
+        TPZAutoPointer<TPZStructMatrixT<STATE>> matspMumps =
+            new TPZSpStructMatrixMumps<STATE>(cmesh);
+        matspMumps->SetNumThreads(nthreadsAssemble);
+        anMumps.SetStructuralMatrix(*matspMumps);
+        TPZStepSolver<STATE> stepMumps;
+        stepMumps.SetDirect(ECholesky);
+        anMumps.SetSolver(stepMumps);
+        
         for (auto nthreads : nThreadsSolver) {
           // ===== MUMPS TEST =====
           {
-            // Clone cmesh to avoid state conflicts between solvers
-            TPZAutoPointer<TPZCompMesh> cmesh(cmesh_original->Clone());
-
             std::cout << "\n\nRunning for " << neldiv << " elements in each direction.\n";
             std::cout << "  Polynomial order: " << pord << std::endl;
             std::cout << "Number of equation = " << neq << std::endl;
@@ -345,10 +368,11 @@ int main(int argc, char const *argv[]) {
               }
             }
 
-            TPZAutoPointer<TPZStructMatrixT<STATE>> matspMumps =
-                new TPZSpStructMatrixMumps<STATE>(cmesh);
-
-            result = auxExecSolvers(EMumps, matspMumps, cmesh, referenceSolveTimeMumps, nthreads);
+            result = auxExecSolvers(EMumps, anMumps, referenceSolveTimeMumps, nthreads, firstIteration, mumpsAssemblyTime);
+            if (firstIteration) {
+              mumpsAssemblyTime = result["AssemblyTime_s"];
+              firstIteration = false;
+            }
           }
           resultsFile << neldiv << "," << pord << "," << neq << ",MUMPS," << nthreads << ","
                       << result["AssemblyTime_s"] << "," << result["RealUsedThreadsAssembly"] << ","
