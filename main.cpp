@@ -249,7 +249,7 @@ int main(int argc, char const *argv[]) {
   // TPZVec<int> nThreadsSolver(maxNumOfThreads);
   // iota(nThreadsSolver.begin(), nThreadsSolver.end(), 1);
   /* ************************************************************ */
-  TPZVec<int> nThreadsSolver{1, 6, 12};
+  TPZVec<int> nThreadsSolver{12};
   /* ************************************************************ */
 
   const bool isOutFile = true;
