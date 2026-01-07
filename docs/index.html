@@ -6,6 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Solver Performance: Speedup Comparison</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -47,7 +49,7 @@
             border: 1px solid #eee;
         }
 
-        .filter-container label {
+        .filter-container>label {
             font-weight: bold;
             color: #2c3e50;
             margin-right: 10px;
@@ -127,14 +129,27 @@
         <h1>Solver Performance: Speedup Comparison</h1>
         <p class="subtitle">MUMPS vs Pardiso - Parallel Scaling Analysis</p>
 
-        <div class="filter-container">
-            <label for="eqFilter">Select Equation Set:</label>
-            <select id="eqFilter">
-                <option value="" selected>Loading....</option>
-                <!-- <option value="63001">63.001 (PolyOrder 1)</option>
-                <option value="251001">251.001 (PolyOrder 2)</option>
-                <option value="564001" selected>564.001 (PolyOrder 3)</option> -->
-            </select>
+        <div class="row">
+            <div class="col">
+                <div class="filter-container">
+                    <label for="eqFilter">Select Equation Set:</label>
+                    <select id="eqFilter">
+                        <option value="" selected>Loading....</option>
+                    </select>
+                </div>
+            </div>
+            <div class="col">
+                <div class="filter-container">
+                    <div class="btn-group" role="group" aria-label="Basic radio toggle button group">
+                        <input type="radio" class="btn-check" name="chart_type" id="chart_type_speedup"
+                            autocomplete="off" checked>
+                        <label class="btn btn-outline-secondary" for="chart_type_speedup">Speedup</label>
+
+                        <input type="radio" class="btn-check" name="chart_type" id="chart_type_time" autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="chart_type_time">Time</label>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div id="chartContainer">
@@ -143,31 +158,33 @@
 
         <div class="stats">
             <div class="stat-card">
-                <h3><span class="legend-icon mumps-icon"></span>MUMPS Max Speedup</h3>
+                <h3><span class="legend-icon mumps-icon"></span>MUMPS <span id="mumpsMaxType">Max Speedup</span></h3>
                 <div class="value mumps" id="mumpsMax">-</div>
                 <small>at <span id="mumpsMaxThreads">-</span> threads</small>
             </div>
 
             <div class="stat-card">
-                <h3><span class="legend-icon pardiso-icon"></span>Pardiso Max Speedup</h3>
+                <h3><span class="legend-icon pardiso-icon"></span>Pardiso <span id="pardisoMaxType">Max Speedup</span></h3>
                 <div class="value pardiso" id="pardisoMax">-</div>
                 <small>at <span id="pardisoMaxThreads">-</span> threads</small>
             </div>
 
             <div class="stat-card">
-                <h3>Average MUMPS Speedup</h3>
+                <h3>Average MUMPS <span id="mumpsAvgType">Speedup</span></h3>
                 <div class="value mumps" id="mumpsAvg">-</div>
                 <small>across all thread counts</small>
             </div>
 
             <div class="stat-card">
-                <h3>Average Pardiso Speedup</h3>
+                <h3>Average Pardiso <span id="pardisoAvgType">Speedup</span></h3>
                 <div class="value pardiso" id="pardisoAvg">-</div>
                 <small>across all thread counts</small>
             </div>
         </div>
     </div>
-
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+        crossorigin="anonymous"></script>
     <script>
         (async () => {
             const res = await fetch('solver_performance_results.csv');
@@ -210,15 +227,17 @@
                 if (!fullDataset[neqPoly][NumSolverThreads]) {
                     fullDataset[neqPoly][NumSolverThreads] = {
                         threads: NumSolverThreads,
-                        mumps: null,
-                        pardiso: null
+                        mumps: { speedup: null, time: null },
+                        pardiso: { speedup: null, time: null }
                     };
                 }
 
                 if (Solver === 'Pardiso') {
-                    fullDataset[neqPoly][iNumSolverThreads].pardiso = parseFloat(SpeedUP);
+                    fullDataset[neqPoly][iNumSolverThreads].pardiso.speedup = parseFloat(SpeedUP);
+                    fullDataset[neqPoly][iNumSolverThreads].pardiso.time = parseFloat(SolveTime_s);
                 } else if (Solver === 'MUMPS') {
-                    fullDataset[neqPoly][iNumSolverThreads].mumps = parseFloat(SpeedUP);
+                    fullDataset[neqPoly][iNumSolverThreads].mumps.speedup = parseFloat(SpeedUP);
+                    fullDataset[neqPoly][iNumSolverThreads].mumps.time = parseFloat(SolveTime_s);
                 }
             });
 
@@ -228,118 +247,55 @@
                 eqFilter.appendChild(option);
             });
 
-            // Dados extraídos do arquivo solver_performance_results.csv
-            // const fullDataset = {
-            //     "63001": [
-            //         { threads: 1, mumps: 1, pardiso: 1 },
-            //         { threads: 2, mumps: 1.04243, pardiso: 1.03839 },
-            //         { threads: 3, mumps: 1.07879, pardiso: 1.03008 },
-            //         { threads: 4, mumps: 1.07995, pardiso: 1.08507 },
-            //         { threads: 5, mumps: 0.921545, pardiso: 1.07188 },
-            //         { threads: 6, mumps: 1.17752, pardiso: 1.07026 },
-            //         { threads: 7, mumps: 1.15255, pardiso: 1.04734 },
-            //         { threads: 8, mumps: 1.18241, pardiso: 1.06793 },
-            //         { threads: 9, mumps: 1.07619, pardiso: 0.870455 },
-            //         { threads: 10, mumps: 0.860685, pardiso: 1.04709 },
-            //         { threads: 11, mumps: 0.978327, pardiso: 0.914131 },
-            //         { threads: 12, mumps: 0.959756, pardiso: 0.792788 },
-            //         { threads: 13, mumps: 1.16338, pardiso: 1.00492 },
-            //         { threads: 14, mumps: 1.1423, pardiso: 0.971423 },
-            //         { threads: 15, mumps: 1.04704, pardiso: 0.989242 },
-            //         { threads: 16, mumps: 1.0221, pardiso: 0.921558 },
-            //         { threads: 17, mumps: 1.10608, pardiso: 0.45985 },
-            //         { threads: 18, mumps: 1.1044, pardiso: 0.886701 },
-            //         { threads: 19, mumps: 1.09122, pardiso: 0.978483 },
-            //         { threads: 20, mumps: 1.00377, pardiso: 0.870938 },
-            //         { threads: 21, mumps: 1.06693, pardiso: 0.821254 },
-            //         { threads: 22, mumps: 1.06396, pardiso: 0.9036 },
-            //         { threads: 23, mumps: 0.995853, pardiso: 0.834457 },
-            //         { threads: 24, mumps: 0.968708, pardiso: 0.889599 }
-            //     ],
-            //     "251001": [
-            //         { threads: 1, mumps: 1, pardiso: 1 },
-            //         { threads: 2, mumps: 1.01344, pardiso: 1.07315 },
-            //         { threads: 3, mumps: 1.14954, pardiso: 1.01963 },
-            //         { threads: 4, mumps: 1.12024, pardiso: 1.12889 },
-            //         { threads: 5, mumps: 1.11671, pardiso: 1.11669 },
-            //         { threads: 6, mumps: 1.24939, pardiso: 1.14142 },
-            //         { threads: 7, mumps: 1.25012, pardiso: 1.03218 },
-            //         { threads: 8, mumps: 1.27392, pardiso: 1.12277 },
-            //         { threads: 9, mumps: 1.24328, pardiso: 1.07827 },
-            //         { threads: 10, mumps: 1.25558, pardiso: 1.04176 },
-            //         { threads: 11, mumps: 1.21763, pardiso: 1.11673 },
-            //         { threads: 12, mumps: 1.31408, pardiso: 1.11295 },
-            //         { threads: 13, mumps: 1.30515, pardiso: 0.931871 },
-            //         { threads: 14, mumps: 1.33169, pardiso: 1.06508 },
-            //         { threads: 15, mumps: 1.27204, pardiso: 1.01686 },
-            //         { threads: 16, mumps: 1.05492, pardiso: 0.993785 },
-            //         { threads: 17, mumps: 1.30864, pardiso: 1.07937 },
-            //         { threads: 18, mumps: 1.30862, pardiso: 1.08552 },
-            //         { threads: 19, mumps: 1.0521, pardiso: 0.976967 },
-            //         { threads: 20, mumps: 1.30129, pardiso: 1.09334 },
-            //         { threads: 21, mumps: 1.13197, pardiso: 1.05694 },
-            //         { threads: 22, mumps: 1.27084, pardiso: 0.918349 },
-            //         { threads: 23, mumps: 1.25529, pardiso: 1.05103 },
-            //         { threads: 24, mumps: 1.07622, pardiso: 1.06404 }
-            //     ],
-            //     "564001": [
-            //         { threads: 1, mumps: 1, pardiso: 1 },
-            //         { threads: 2, mumps: 1.09297, pardiso: 1.13311 },
-            //         { threads: 3, mumps: 1.26189, pardiso: 1.14455 },
-            //         { threads: 4, mumps: 1.31943, pardiso: 1.10415 },
-            //         { threads: 5, mumps: 1.26706, pardiso: 1.1157 },
-            //         { threads: 6, mumps: 1.32342, pardiso: 1.11575 },
-            //         { threads: 7, mumps: 1.34053, pardiso: 1.10395 },
-            //         { threads: 8, mumps: 1.34684, pardiso: 1.15101 },
-            //         { threads: 9, mumps: 1.43765, pardiso: 1.13854 },
-            //         { threads: 10, mumps: 1.35963, pardiso: 1.15127 },
-            //         { threads: 11, mumps: 1.44033, pardiso: 1.07698 },
-            //         { threads: 12, mumps: 1.44565, pardiso: 1.10381 },
-            //         { threads: 13, mumps: 1.395, pardiso: 1.13011 },
-            //         { threads: 14, mumps: 1.33117, pardiso: 1.1324 },
-            //         { threads: 15, mumps: 1.46108, pardiso: 1.04536 },
-            //         { threads: 16, mumps: 1.14397, pardiso: 1.15692 },
-            //         { threads: 17, mumps: 1.36812, pardiso: 1.07617 },
-            //         { threads: 18, mumps: 1.33139, pardiso: 1.16982 },
-            //         { threads: 19, mumps: 1.37299, pardiso: 1.14818 },
-            //         { threads: 20, mumps: 1.0667, pardiso: 1.16468 },
-            //         { threads: 21, mumps: 1.33621, pardiso: 1.0559 },
-            //         { threads: 22, mumps: 1.40716, pardiso: 1.09306 },
-            //         { threads: 23, mumps: 1.15706, pardiso: 1.14447 },
-            //         { threads: 24, mumps: 1.32946, pardiso: 1.03833 }
-            //     ]
-            // };
-
             let speedupChart;
             const ctx = document.getElementById('speedupChart').getContext('2d');
             const filter = document.getElementById('eqFilter');
+            const chart_type = document.querySelectorAll('input[name="chart_type"]');
 
-            function updateDashboard(numEq) {
+            function updateDashboard(numEq, chartType) {
                 const data = Object.values(fullDataset[numEq]);
+                const isSpeedup = chartType === 'chart_type_speedup';
 
                 // Cálculo de estatísticas
-                const mumpsVals = data.map(d => d.mumps);
-                const pardisoVals = data.map(d => d.pardiso);
+                const mumpsVals = data.map(d => d.mumps[isSpeedup ? 'speedup' : 'time']);
+                const pardisoVals = data.map(d => d.pardiso[isSpeedup ? 'speedup' : 'time']);
 
-                const mMax = Math.max(...mumpsVals);
-                const pMax = Math.max(...pardisoVals);
-                const mMaxT = data.find(d => d.mumps === mMax).threads;
-                const pMaxT = data.find(d => d.pardiso === pMax).threads;
-                const mAvg = (mumpsVals.reduce((a, b) => a + b, 0) / mumpsVals.length).toFixed(3);
-                const pAvg = (pardisoVals.reduce((a, b) => a + b, 0) / pardisoVals.length).toFixed(3);
+                let mV, pV, mT, pT, mAvg, pAvg;
+                if (isSpeedup) {
+                    mV = Math.max(...mumpsVals);
+                    pV = Math.max(...pardisoVals);
+                    mT = data.find(d => d.mumps[isSpeedup ? 'speedup' : 'time'] === mV).threads;
+                    pT = data.find(d => d.pardiso[isSpeedup ? 'speedup' : 'time'] === pV).threads;
+                    mAvg = (mumpsVals.reduce((a, b) => a + b, 0) / mumpsVals.length).toFixed(3);
+                    pAvg = (pardisoVals.reduce((a, b) => a + b, 0) / pardisoVals.length).toFixed(3);
+
+                } else {
+                    mV = Math.min(...mumpsVals);
+                    pV = Math.min(...pardisoVals);
+                    mT = data.find(d => d.mumps[isSpeedup ? 'speedup' : 'time'] === mV).threads;
+                    pT = data.find(d => d.pardiso[isSpeedup ? 'speedup' : 'time'] === pV).threads;
+                    mAvg = (mumpsVals.reduce((a, b) => a + b, 0) / mumpsVals.length).toFixed(3);
+                    pAvg = (pardisoVals.reduce((a, b) => a + b, 0) / pardisoVals.length).toFixed(3);
+                }
 
                 // Atualização dos cards
-                document.getElementById('mumpsMax').textContent = mMax.toFixed(3);
-                document.getElementById('mumpsMaxThreads').textContent = mMaxT;
-                document.getElementById('pardisoMax').textContent = pMax.toFixed(3);
-                document.getElementById('pardisoMaxThreads').textContent = pMaxT;
+                document.getElementById('mumpsMax').textContent = mV.toFixed(3);
+                document.getElementById('mumpsMaxType').textContent = isSpeedup ? 'SMax peedup' : 'Min Time (s)';
+                document.getElementById('mumpsMaxThreads').textContent = mT;
+                document.getElementById('pardisoMax').textContent = pV.toFixed(3);
+                document.getElementById('pardisoMaxType').textContent = isSpeedup ? 'Max Speedup' : 'Min Time (s)';
+                document.getElementById('pardisoMaxThreads').textContent = pT;
                 document.getElementById('mumpsAvg').textContent = mAvg;
+                document.getElementById('mumpsAvgType').textContent = isSpeedup ? 'Speedup' : 'Time (s)';
                 document.getElementById('pardisoAvg').textContent = pAvg;
+                document.getElementById('pardisoAvgType').textContent = isSpeedup ? 'Speedup' : 'Time (s)';
 
                 // Atualização ou Criação do Gráfico
                 if (speedupChart) {
                     speedupChart.data.datasets[0].data = mumpsVals;
                     speedupChart.data.datasets[1].data = pardisoVals;
+                    speedupChart.data.datasets[2].hidden = !isSpeedup;
+                    speedupChart.options.scales.y.title.text = isSpeedup ? 'Speedup' : 'Time (s)';
                     speedupChart.update();
                 } else {
                     speedupChart = new Chart(ctx, {
@@ -387,7 +343,7 @@
                             },
                             scales: {
                                 x: { title: { display: true, text: 'Number of Threads' } },
-                                y: { title: { display: true, text: 'Speedup' }, beginAtZero: true }
+                                y: { title: { display: true, text: isSpeedup ? 'Speedup' : 'Time (s)' }, beginAtZero: true }
                             }
                         }
                     });
@@ -395,10 +351,11 @@
             }
 
             // Listener para o filtro
-            filter.addEventListener('change', (e) => updateDashboard(e.target.value));
+            filter.addEventListener('change', (e) => updateDashboard(e.target.value, Array.from(chart_type).find(r => r.checked).id));
+            chart_type.forEach(radio => radio.addEventListener('change', (e) => updateDashboard(filter.value, e.target.id)));
 
             // Inicialização com o valor padrão
-            updateDashboard(filter.value);
+            updateDashboard(filter.value, Array.from(chart_type).find(r => r.checked).id);
         })();
     </script>
 </body>
