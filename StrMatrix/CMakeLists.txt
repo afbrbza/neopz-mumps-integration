@@ -9,17 +9,23 @@ set(public_headers
     #sparse
     TPZSSpStructMatrixMumps.h
     TPZSpStructMatrixMumps.h
+    TPZSSpStructMatrixSpooles.h
+    TPZSpStructMatrixSpooles.h
    )
 set(headers
     #sparse
     TPZSSpStructMatrixMumps.h
     TPZSpStructMatrixMumps.h
+    TPZSSpStructMatrixSpooles.h
+    TPZSpStructMatrixSpooles.h
    )
 
 set(sources
     #sparse
     TPZSSpStructMatrixMumps.cpp
     TPZSpStructMatrixMumps.cpp
+    TPZSSpStructMatrixSpooles.cpp
+    TPZSpStructMatrixSpooles.cpp
    )
 
 install(FILES ${public_headers} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/StrMatrix)

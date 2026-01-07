@@ -1,6 +1,6 @@
 # FirstTest - Finite Element Analysis with NeoPZ
 
-Sistema de análise de elementos finitos usando a biblioteca NeoPZ com suporte para solver MUMPS.
+<!-- Sistema de análise de elementos finitos usando a biblioteca NeoPZ com suporte para solver MUMPS.
 
 ## 📚 Documentação
 
@@ -11,7 +11,7 @@ Sistema de análise de elementos finitos usando a biblioteca NeoPZ com suporte p
 - **[Solução Completa](docs/SOLUCAO_COMPLETA.md)** - Detalhes da implementação
 - **[Problema e Solução](docs/PROBLEMA_E_SOLUCAO.md)** - Análise de problemas encontrados
 - **[Integração MUMPS](docs/MUMPS_INTEGRATION_SUMMARY.md)** - Documentação do solver MUMPS
-- **[Bug Report MUMPS](docs/BUG_REPORT_MUMPS_SYMMETRIC.md)** - Relatório de bug do MUMPS
+- **[Bug Report MUMPS](docs/BUG_REPORT_MUMPS_SYMMETRIC.md)** - Relatório de bug do MUMPS -->
 
 ## 🚀 Quick Start
 

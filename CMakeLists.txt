@@ -28,3 +28,10 @@ add_subdirectory(Matrix)
 include(cmake/EnableMUMPS.cmake)
 enable_mumps(firsttest)
 # endif()
+
+#enabling SPOOLES library
+# option(USING_SPOOLES "Whether the SPOOLES library will be linked in" ON)
+# if(USING_SPOOLES)
+include(cmake/EnableSPOOLES.cmake)
+enable_spooles(firsttest)
+# endif()

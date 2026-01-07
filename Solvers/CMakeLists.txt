@@ -4,9 +4,11 @@ target_include_directories(firsttest PUBLIC
     )
 set(public_headers
     TPZMumpsSolver.h
+    TPZSpoolesSolver.h
     )
 set(sources
     TPZMumpsSolver.cpp
+    TPZSpoolesSolver.cpp
     )
 
 install(FILES ${public_headers} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Solvers)
