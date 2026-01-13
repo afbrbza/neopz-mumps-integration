@@ -1,15 +1,16 @@
+#include "OutputCapture.h"
 #include "TPZMultiphysicsCompMesh.h"
 #include "TPZRefPatternDataBase.h"
 #include "TPZSSpStructMatrix.h"
 #include "TPZSSpStructMatrixMumps.h"
-#include "TPZSSpStructMatrixSpooles.h"
+#include "TPZSYSMPMumps.h"
+#include "TPZSYSMPPardiso.h"
 #include "TPZSimpleTimer.h"
 #include "TPZSpStructMatrixMumps.h"
-#include "TPZSpStructMatrixSpooles.h"
 #include "TPZStructMatrixOMPorTBB.h"
 #include "TPZVTKGenerator.h"
 #include "TPZVTKGeoMesh.h"
-#include "TPZYSMPSpooles.h"
+#include "TPZYSMPMumps.h"
 #include "pzbuildmultiphysicsmesh.h"
 #include "pzskylstrmatrix.h"
 #include "pzstepsolver.h"
@@ -173,139 +174,124 @@ TPZCompMesh *createCompMesh(TPZGeoMesh *gmesh, const int pord) {
   return cmesh;
 }
 
-std::string executeCommand(const std::string &command) {
-  std::array<char, 128> buffer;
-  std::string result;
-  FILE *pipe = popen(command.c_str(), "r");
-  if (!pipe) throw std::runtime_error("popen() failed!");
-  while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
-    result += buffer.data();
-  }
-  int status = pclose(pipe);
-  if (status == -1) throw std::runtime_error("pclose() failed!");
-  return result;
-}
-
 int main(int argc, char const *argv[]) {
 #ifdef PZ_LOG
   TPZLogger::InitializePZLOG();
 #endif
 
   enum Solvers { EPardiso,
-                 EMumps,
-                 ESpooles };
+                 EMumps };
   const int nthreadsAssemble = 0; // number of threads (0 = automatic)
   auto auxExecSolvers = [&](Solvers solver,
                             TPZLinearAnalysis &an,
                             double &referenceSolveTime,
                             int nthreads,
-                            bool doAssemble = true,
-                            double assemblyTime = 0.0)
+                            bool doAssemble = true)
       -> map<string, double> {
     // var to save result of solver execution an return it
     map<string, double> result;
 
+    OutputCapture capture; // Capture stdout/stderr
+
     if (doAssemble) {
-      double assemblyTimeLocal = 0;
-      {
-        TPZSimpleTimer t("Time for assembly", true);
-        an.Assemble();
-        assemblyTimeLocal = t.ReturnTimeDouble() / 1000;
-        result["AssemblyTime_s"] = assemblyTimeLocal;
-      }
-      cout << "Seconds for assembly: " << result["AssemblyTime_s"] << " s\n";
+      an.Assemble();
+
+      auto &mySolver = an.MatrixSolver<STATE>();
+      auto mCast = mySolver.Matrix();
+      mCast->SetDefPositive(true);
 
       // Force cleanup of threads after assembly
       if (solver == EPardiso) {
         mkl_free_buffers();
-      }
-    } else {
-      result["AssemblyTime_s"] = assemblyTime;
-      cout << "Reusing assembly from first iteration\n";
-    }
 
-    if (solver == EPardiso) {
-      result["RealUsedThreadsAssembly"] = mkl_get_max_threads();
-      cout << "MKL threads used in assembly: " << result["RealUsedThreadsAssembly"] << "\n";
-    } else if (solver == EMumps || solver == ESpooles) {
-#pragma omp parallel
-      {
-#pragma omp master
-        {
-          result["RealUsedThreadsAssembly"] = omp_get_num_threads();
-          cout << "OpenMP threads used in assembly: " << result["RealUsedThreadsAssembly"] << "\n";
+        auto *mat = dynamic_cast<TPZSYsmpMatrixPardiso<STATE> *>(mCast.operator->());
+        if (mat) {
+          auto &pardisoControl = mat->GetPardisoControl();
+          pardisoControl.SetMessageLevel(1);
+        }
+      } else {
+        auto mat = dynamic_cast<TPZSYsmpMatrixMumps<STATE> *>(mCast.operator->());
+        if (mat) {
+          auto &mumpsControl = mat->GetMumpsControl();
+          mumpsControl.SetMessageLevel(2); // ICNTL(4) = 2 (detailed statistics)
+
+          // Habilitar saída do MUMPS para capturar estatísticas
+          mumpsControl.SetICNTL(1, 6); // stream para mensagens de erro
+          mumpsControl.SetICNTL(2, 0); // stream para estatísticas
+          mumpsControl.SetICNTL(3, 6); // stream para informações globais
+          mumpsControl.SetICNTL(4, 2); // nível de impressão (2 = estatísticas)
         }
       }
     }
 
-    auto mCast = an.MatrixSolver<STATE>().Matrix();
-    mCast->SetDefPositive(true);
-
     // Solve with timing
-    double solveTime = 0;
-    {
-      TPZSimpleTimer t("Time for solve", true);
-      an.Solve();
-      solveTime = t.ReturnTimeDouble() / 1000;
-      result["SolveTime_s"] = solveTime;
-    }
-    cout << "Seconds for solve: " << result["SolveTime_s"] << " s\n";
+    an.Solve();
 
-    if (nthreads == 1) {
-      referenceSolveTime = result["SolveTime_s"];
+    // Get captured output
+    std::string capturedOutput = capture.getOutput();
+
+    // Print captured output
+    if (!capturedOutput.empty()) {
+      std::cout << capturedOutput << std::endl;
+    }
+
+    // Parsear métricas do solver
+    SolverMetrics metrics;
+    if (solver == EMumps) {
+      metrics = capture.parseMumpsOutput(capturedOutput);
+    } else if (solver == EPardiso) {
+      metrics = capture.parsePardisoOutput(capturedOutput);
+    }
+
+    result["AnalysisTime_s"] = metrics.analysisTime;
+    result["FactorizationTime_s"] = metrics.factorizationTime;
+    result["SolverSolveTime_s"] = metrics.solveTime;
+    result["EstimatedFlops"] = metrics.estimatedFlops;
+    result["ActualFlops"] = metrics.actualFlops;
+    result["RealSpaceFactors"] = metrics.realSpaceFactors;
+    result["MaxFrontalSize"] = metrics.maxFrontalSize;
+    result["CGSIterations"] = metrics.cgsIterations;
+    result["RealUsedThreadsFromOutput"] = metrics.numThreads;
+
+    if (metrics.numThreads == 1) {
+      referenceSolveTime = metrics.solveTime;
       result["SpeedUP"] = 1.0;
     } else {
-      result["SpeedUP"] = result["SolveTime_s"] > 0 ? ((referenceSolveTime ?: 0) / result["SolveTime_s"]) : 0;
+      result["SpeedUP"] = (metrics.solveTime > 0) ? (referenceSolveTime / metrics.solveTime) : 0.0;
     }
     cout << "SpeedUP 1/" << nthreads << ": " << result["SpeedUP"] << "\n";
 
-    if (solver == EPardiso) {
-      result["RealUsedThreadsSolve"] = mkl_get_max_threads();
-      cout << "MKL threads used in solve: " << result["RealUsedThreadsSolve"] << "\n";
-    } else if (solver == EMumps || solver == ESpooles) {
-#pragma omp parallel
-      {
-#pragma omp master
-        {
-          result["RealUsedThreadsSolve"] = omp_get_num_threads();
-          cout << "OpenMP threads used in solve: " << result["RealUsedThreadsSolve"] << "\n";
-        }
-      }
-    }
-
-    std::string solutionLabel = "Solution " + std::to_string(solver) + " with " + std::to_string(nthreads) + " threads:";
-    try {
-      an.Solution().Print(solutionLabel.c_str());
-    } catch (const std::exception& e) {
-      std::cerr << "Error printing solution: " << e.what() << "\n";
-    }
+    // std::string solutionLabel = "Solution " + std::to_string(solver) + " with " + std::to_string(nthreads) + " threads:";
+    // try {
+    //   an.Solution().Print(solutionLabel.c_str());
+    // } catch (const std::exception& e) {
+    //   std::cerr << "Error printing solution: " << e.what() << "\n";
+    // }
 
     return result;
   };
 
-  const TPZVec<int> nElemsDiv{2};
-  const TPZVec<int> POrds{1};
+  const TPZVec<int> nElemsDiv{750};
+  const TPZVec<int> POrds{3};
   /* ************************************************************ */
-  // int maxNumOfThreads = executeCommand("nproc --all").empty() ? 8 : std::stoi(executeCommand("nproc --all"));
   // TPZVec<int> nThreadsSolver(maxNumOfThreads);
   // iota(nThreadsSolver.begin(), nThreadsSolver.end(), 1);
   /* ************************************************************ */
-  TPZVec<int> nThreadsSolver{12};
+  TPZVec<int> nThreadsSolver{1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24};
   /* ************************************************************ */
 
   const bool isOutFile = true;
   std::ofstream csvFile("solver_performance_results.csv");
   std::ostream &resultsFile = isOutFile ? (std::ostream &)csvFile : std::cout;
-  resultsFile << "NumElementsPerDir,PolyOrder,NumEquations,Solver,NumSolverThreads,AssemblyTime_s,RealUsedThreadsAssembly,SolveTime_s,RealUsedThreadsSolve,SpeedUP\n";
+  resultsFile << "NumElementsPerDir,PolyOrder,NumEquations,Solver,AnalysisTime_s,"
+              << "FactorizationTime_s,SolverSolveTime_s,EstimatedFlops,ActualFlops,RealSpaceFactors,"
+              << "MaxFrontalSize,CGSIterations,RealUsedThreadsFromOutput,SpeedUP\n";
 
-  // executeCommand("clear"); // clear console output
   const bool execPardiso = true;
   const bool execMumps = true;
-  const bool execSpooles = true;
 
   double referenceSolveTimePardiso = 0.0;
   double referenceSolveTimeMumps = 0.0;
-  double referenceSolveTimeSpooles = 0.0;
 
   for (auto neldiv : nElemsDiv) {
     TPZAutoPointer<TPZGeoMesh> gmesh = createMeshWithGenGrid({neldiv, neldiv}, {0., 0.}, {2., 1.});
@@ -317,7 +303,6 @@ int main(int argc, char const *argv[]) {
       int64_t neq = cmesh_original->NEquations();
 
       map<string, double> result;
-      double pardisoAssemblyTime = 0.0;
       if (execPardiso) {
         bool firstIteration = true;
 
@@ -359,16 +344,22 @@ int main(int argc, char const *argv[]) {
             int mkl_max_threads = mkl_get_max_threads();
             std::cout << "MKL max threads: " << mkl_max_threads << std::endl;
 
-            result = auxExecSolvers(EPardiso, anPardiso, referenceSolveTimePardiso, nthreads, firstIteration, pardisoAssemblyTime);
+            result = auxExecSolvers(EPardiso, anPardiso, referenceSolveTimePardiso, nthreads, firstIteration);
             if (firstIteration) {
-              pardisoAssemblyTime = result["AssemblyTime_s"];
               firstIteration = false;
             }
           }
-          resultsFile << neldiv << "," << pord << "," << neq << ",Pardiso," << nthreads << ","
-                      << result["AssemblyTime_s"] << "," << result["RealUsedThreadsAssembly"] << ","
-                      << result["SolveTime_s"] << "," << result["RealUsedThreadsSolve"]
-                      << "," << result["SpeedUP"] << "\n";
+          resultsFile << neldiv << "," << pord << "," << neq << ",Pardiso,"
+                      << result["AnalysisTime_s"] << ","
+                      << result["FactorizationTime_s"] << ","
+                      << result["SolverSolveTime_s"] << ","
+                      << result["EstimatedFlops"] << ","
+                      << result["ActualFlops"] << ","
+                      << result["RealSpaceFactors"] << ","
+                      << result["MaxFrontalSize"] << ","
+                      << result["CGSIterations"] << ","
+                      << result["RealUsedThreadsFromOutput"] << ","
+                      << result["SpeedUP"] << "\n";
         }
 
         // Force cleanup of MKL threads after Pardiso is done
@@ -380,7 +371,6 @@ int main(int argc, char const *argv[]) {
 
       if (execMumps) {
         bool firstIteration = true;
-        double mumpsAssemblyTime = 0.0;
 
         // Clone cmesh ONCE for all MUMPS iterations
         TPZAutoPointer<TPZCompMesh> cmesh(cmesh_original->Clone());
@@ -388,7 +378,7 @@ int main(int argc, char const *argv[]) {
         // Create analysis object ONCE for all MUMPS iterations
         TPZLinearAnalysis anMumps(cmesh);
         TPZAutoPointer<TPZStructMatrixT<STATE>> matspMumps =
-            new TPZSpStructMatrixMumps<STATE>(cmesh);
+            new TPZSSpStructMatrixMumps<STATE>(cmesh);
         matspMumps->SetNumThreads(nthreadsAssemble);
         anMumps.SetStructuralMatrix(*matspMumps);
         TPZStepSolver<STATE> stepMumps;
@@ -417,16 +407,22 @@ int main(int argc, char const *argv[]) {
               }
             }
 
-            result = auxExecSolvers(EMumps, anMumps, referenceSolveTimeMumps, nthreads, firstIteration, mumpsAssemblyTime);
+            result = auxExecSolvers(EMumps, anMumps, referenceSolveTimeMumps, nthreads, firstIteration);
             if (firstIteration) {
-              mumpsAssemblyTime = result["AssemblyTime_s"];
               firstIteration = false;
             }
           }
-          resultsFile << neldiv << "," << pord << "," << neq << ",MUMPS," << nthreads << ","
-                      << result["AssemblyTime_s"] << "," << result["RealUsedThreadsAssembly"] << ","
-                      << result["SolveTime_s"] << "," << result["RealUsedThreadsSolve"]
-                      << "," << result["SpeedUP"]
+          resultsFile << neldiv << "," << pord << "," << neq << ",MUMPS,"
+                      << result["AnalysisTime_s"] << ","
+                      << result["FactorizationTime_s"] << ","
+                      << result["SolverSolveTime_s"] << ","
+                      << result["EstimatedFlops"] << ","
+                      << result["ActualFlops"] << ","
+                      << result["RealSpaceFactors"] << ","
+                      << result["MaxFrontalSize"] << ","
+                      << result["CGSIterations"] << ","
+                      << result["RealUsedThreadsFromOutput"] << ","
+                      << result["SpeedUP"]
                       << "\n";
         }
 
@@ -434,76 +430,6 @@ int main(int argc, char const *argv[]) {
         omp_set_num_threads(1);
         openblas_set_num_threads(1);
         std::cout << "\n=== OpenMP/OpenBLAS threads cleaned up after MUMPS ===\n"
-                  << std::endl;
-      }
-
-      if (execSpooles) {
-        bool firstIteration = true;
-        double spoolesAssemblyTime = 0.0;
-        double referenceSolveTimeSpooles = 0.0;
-
-        // Clone cmesh ONCE for all SPOOLES iterations
-        TPZAutoPointer<TPZCompMesh> cmesh(cmesh_original->Clone());
-
-        // Create analysis object ONCE for all SPOOLES iterations
-        TPZLinearAnalysis anSpooles(cmesh);
-        TPZAutoPointer<TPZStructMatrixT<STATE>> matspSpooles =
-            new TPZSpStructMatrixSpooles<STATE>(cmesh);
-        matspSpooles->SetNumThreads(nthreadsAssemble);
-        anSpooles.SetStructuralMatrix(*matspSpooles);
-        TPZStepSolver<STATE> stepSpooles;
-        stepSpooles.SetDirect(ECholesky);
-        anSpooles.SetSolver(stepSpooles);
-
-        for (auto nthreads : nThreadsSolver) {
-          // ===== SPOOLES TEST =====
-          map<string, double> result;
-          {
-            std::cout << "\n\nRunning for " << neldiv << " elements in each direction.\n";
-            std::cout << "  Polynomial order: " << pord << std::endl;
-            std::cout << "Number of equation = " << neq << std::endl;
-            std::cout << "\n=== Using SPOOLES solver with " << nthreads << " threads ===\n";
-
-            // SPOOLES uses PTHREADS internally (NOT OpenMP!)
-            // OpenMP only for assembly, OpenBLAS for BLAS operations
-            mkl_set_num_threads(1); // Disable MKL to avoid conflicts
-            openblas_set_num_threads(nthreads);
-            omp_set_num_threads(nthreads);
-
-            // Configure SPOOLES threads
-            if (firstIteration) {
-              auto *mat = dynamic_cast<TPZFYsmpMatrixSpooles<STATE> *>(
-                  anSpooles.MatrixSolver<STATE>().Matrix().operator->());
-              if (mat) {
-                mat->GetSpoolesControl().SetNumThreads(nthreads);
-                mat->GetSpoolesControl().SetMessageLevel(1);
-                std::cout << "SPOOLES threads configured: " << nthreads << "\n";
-              }
-            } else {
-              auto *mat = dynamic_cast<TPZFYsmpMatrixSpooles<STATE> *>(
-                  anSpooles.MatrixSolver<STATE>().Matrix().operator->());
-              if (mat) {
-                mat->GetSpoolesControl().SetNumThreads(nthreads);
-              }
-            }
-
-            result = auxExecSolvers(ESpooles, anSpooles, referenceSolveTimeSpooles, nthreads, firstIteration, spoolesAssemblyTime);
-            if (firstIteration) {
-              spoolesAssemblyTime = result["AssemblyTime_s"];
-              firstIteration = false;
-            }
-          }
-          resultsFile << neldiv << "," << pord << "," << neq << ",SPOOLES," << nthreads << ","
-                      << result["AssemblyTime_s"] << "," << result["RealUsedThreadsAssembly"] << ","
-                      << result["SolveTime_s"] << "," << result["RealUsedThreadsSolve"]
-                      << "," << result["SpeedUP"]
-                      << "\n";
-        }
-
-        // Force cleanup of OpenMP/OpenBLAS threads after SPOOLES is done
-        omp_set_num_threads(1);
-        openblas_set_num_threads(1);
-        std::cout << "\n=== OpenMP/OpenBLAS threads cleaned up after SPOOLES ===\n"
                   << std::endl;
       }
     }

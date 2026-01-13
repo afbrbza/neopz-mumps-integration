@@ -5,18 +5,18 @@ find_package(MKL REQUIRED)
 
 find_package(NeoPZ REQUIRED HINTS ${CMAKE_SOURCE_DIR}/../neopz_install/ ${CMAKE_SOURCE_DIR}/../neopz_install/)
 
-add_executable(firsttest main.cpp)
+################################################################
+# PARDISO example
 # add_executable(firsttest main.pardiso.cpp)
-#############################################################################################################
-# target_link_libraries(firsttest PRIVATE NeoPZ::pz)
+# MUMPS example
+add_executable(firsttest main.mumps.cpp)
+################################################################
+target_sources(firsttest PRIVATE ${CMAKE_SOURCE_DIR}/OutputCapture.cpp)
+
 target_link_libraries(firsttest PRIVATE NeoPZ::pz MKL::mkl_intel_ilp64 MKL::mkl_intel_thread MKL::mkl_core iomp5)
 target_compile_definitions(firsttest PRIVATE MKL_ILP64)
 target_compile_options(firsttest PRIVATE -O3 -march=native -fopenmp)
 target_link_options(firsttest PRIVATE -fopenmp)
-#############################################################################################################
-# target_link_libraries(firsttest PRIVATE NeoPZ::pz -fsanitize=address)
-#############################################################################################################
-# add_compile_options(-fsanitize=address -g)
 
 add_subdirectory(Solvers)
 add_subdirectory(StrMatrix)
@@ -27,11 +27,4 @@ add_subdirectory(Matrix)
 # if(USING_MUMPS)
 include(cmake/EnableMUMPS.cmake)
 enable_mumps(firsttest)
-# endif()
-
-#enabling SPOOLES library
-# option(USING_SPOOLES "Whether the SPOOLES library will be linked in" ON)
-# if(USING_SPOOLES)
-include(cmake/EnableSPOOLES.cmake)
-enable_spooles(firsttest)
 # endif()

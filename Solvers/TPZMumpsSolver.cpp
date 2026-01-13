@@ -33,7 +33,6 @@ TPZMumpsSolver<TVar>::TPZMumpsSolver(TPZMumpsSolver &&copy) noexcept
       fSymmetry(copy.fSymmetry),
       fProperty(copy.fProperty),
       fMumpsData(copy.fMumpsData),
-      fParam(std::move(copy.fParam)),
       fMax_num_factors(copy.fMax_num_factors),
       fMatrix_num(copy.fMatrix_num),
       fMessageLevel(copy.fMessageLevel),
@@ -61,7 +60,6 @@ TPZMumpsSolver<TVar>& TPZMumpsSolver<TVar>::operator=(TPZMumpsSolver &&copy) noe
     fSymmetry = copy.fSymmetry;
     fProperty = copy.fProperty;
     fMumpsData = copy.fMumpsData;
-    fParam = std::move(copy.fParam);
     fMax_num_factors = copy.fMax_num_factors;
     fMatrix_num = copy.fMatrix_num;
     fMessageLevel = copy.fMessageLevel;
@@ -625,7 +623,7 @@ void TPZMumpsSolver<TVar>::Solve(const TPZMatrix<TVar> *mat, const TPZFMatrix<TV
 
 template <class TVar>
 void TPZMumpsSolver<TVar>::SetMessageLevel(int lvl) {
-  lvl == 0 ? fMessageLevel = 0 : fMessageLevel = 1;
+  fMessageLevel = lvl;
 }
 
 template <class TVar>
@@ -638,27 +636,29 @@ TPZMumpsSolver<TVar> *TPZMumpsSolver<TVar>::Clone() const {
   newSolver->fMatrixType = fMatrixType;
   newSolver->fMessageLevel = fMessageLevel;
   newSolver->fCustomSettings = fCustomSettings;
-  newSolver->fParam = fParam;
   // Note: fMumpsData, fDecomposed, and fMumpsInitialized are NOT copied
   // The cloned solver will need to be initialized and decomposed separately
   return newSolver;
 }
 
 template <class TVar>
-void TPZMumpsSolver<TVar>::SetParam(const TPZVec<long long> &p) {
-  if (p.size() != fParam.size()) {
+void TPZMumpsSolver<TVar>::SetICNTL(int index, MUMPS_INT value) {
+  const int max_size = 60; // ICNTL array size in MUMPS
+  if (index < 1 || index > max_size) {
     PZError << __PRETTY_FUNCTION__
-            << "\nIncorrect size of PARDISO param array!"
-            << "\nExpected " << fParam.size() << " and got " << p.size()
+            << "\nInvalid ICNTL index!"
+            << "\nExpected index between 1 and " << max_size 
+            << " but got " << index
             << "\nAborting..." << std::endl;
     DebugStop();
   }
-  fParam = p;
+  // MUMPS uses 1-based indexing, C++ uses 0-based
+  fMumpsData.icntl[index - 1] = value;
   fCustomSettings = true;
 }
 
 template <class TVar>
-void TPZMumpsSolver<TVar>::ResetParam() {
+void TPZMumpsSolver<TVar>::ResetICNTL() {
   // will setup param with info regarding matrix' structure
   this->MatrixType();
   fCustomSettings = false;

@@ -3,9 +3,9 @@
 
 #include "TPZMatrixSolver.h"
 
+#include "dmumps_c.h"
 #include "pzmanvector.h"
 #include "tpzautopointer.h"
-#include "dmumps_c.h"
 
 #define JOB_INIT -1
 #define JOB_END -2
@@ -62,13 +62,26 @@ public:
 
   TPZMumpsSolver<TVar> *Clone() const override;
 
-  [[nodiscard]] inline TPZVec<long long> GetParam() const { return fParam; }
+  /**
+   * Returns the ICNTL array used by MUMPS
+   * @return Pointer to the ICNTL array
+   */
+  [[nodiscard]] inline MUMPS_INT *GetICNTL() { return fMumpsData.icntl; }
 
-  void SetParam(const TPZVec<long long> &p);
+  /**
+   * Sets a specific ICNTL parameter in MUMPS
+   * @param index Index of the ICNTL parameter (1-based)
+   * @param value Value to set for the ICNTL parameter
+   */
+  void SetICNTL(int index, MUMPS_INT value);
 
-  void ResetParam();
+  void ResetICNTL();
 
   [[nodiscard]] bool HasCustomSettings() const { return fCustomSettings; }
+
+  [[nodiscard]] inline DMUMPS_STRUC_C &GetMumpsData() { return fMumpsData; }
+
+  [[nodiscard]] inline const DMUMPS_STRUC_C &GetMumpsData() const { return fMumpsData; }
 
   TPZVec<long long> &GetPermutationVec() { return fPermutation; }
 
@@ -86,8 +99,6 @@ protected:
   MProperty fProperty{MProperty::ENonInitialized};
 
   mutable DMUMPS_STRUC_C fMumpsData;
-
-  TPZManVector<long long, 64> fParam;
 
   long long fMax_num_factors{1};
 
