@@ -8,15 +8,15 @@ target_include_directories(firsttest PUBLIC
 set(headers
   TPZSYSMPMumps.h
   TPZYSMPMumps.h
-  TPZSYSMPSpooles.h
-  TPZYSMPSpooles.h
+  # TPZSYSMPSpooles.h
+  # TPZYSMPSpooles.h
 )
 
 set(sources
   TPZSYSMPMumps.cpp
   TPZYSMPMumps.cpp
-  TPZSYSMPSpooles.cpp
-  TPZYSMPSpooles.cpp
+  # TPZSYSMPSpooles.cpp
+  # TPZYSMPSpooles.cpp
 )
 install(FILES ${headers} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Matrix)
 
