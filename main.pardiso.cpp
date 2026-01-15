@@ -149,16 +149,14 @@ int main(int argc, char const *argv[]) {
   const int nthreadsAssembly = 0;
   const bool print = false;
 
-  int num_procs;
-  char *var = getenv("OMP_NUM_THREADS");
-  if (var != NULL) {
-    num_procs = atoi(var);
+  int const num_procs = argc > 1 ? atoi(argv[1]) : 0;
+  if (num_procs > 0) {
     mkl_set_num_threads(num_procs);
   }
 
   // ----- Create geometric mesh -----
   const bool isUseGenGrid = true; // set to 'false' to use manual gmesh creation
-  const int neldiv = argc > 1 ? atoi(argv[1]) : 140;
+  const int neldiv = argc > 2 ? atoi(argv[2]) : 140;
   TPZGeoMesh *gmesh = createMeshWithGenGrid({neldiv, neldiv}, {0., 0.}, {2., 1.});
 
   if (print)
@@ -170,7 +168,7 @@ int main(int argc, char const *argv[]) {
   }
 
   // ----- Create computational mesh -----
-  const int pOrder = argc > 2 ? atoi(argv[2]) : 7;
+  const int pOrder = argc > 3 ? atoi(argv[3]) : 7;
   TPZCompMesh *cmesh = createCompMesh(gmesh, pOrder);
   if (print)
     cmesh->Print(std::cout);

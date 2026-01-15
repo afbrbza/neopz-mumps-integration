@@ -145,20 +145,20 @@ int main(int argc, char const *argv[]) {
   TPZLogger::InitializePZLOG();
 #endif
 
+  TPZSimpleTimer totalTime;
+
   // nthreads use in NeoPZ assembly
   const int nthreadsAssembly = 0;
   const bool print = false;
 
-  int num_procs;
-  char *var = getenv("OMP_NUM_THREADS");
-  if (var != NULL) {
-    num_procs = atoi(var);
+  int const num_procs = argc > 1 ? atoi(argv[1]) : 0;
+  if (num_procs > 0) {
     omp_set_num_threads(num_procs);
   }
 
   // ----- Create geometric mesh -----
   const bool isUseGenGrid = true; // set to 'false' to use manual gmesh creation
-  const int neldiv = argc > 1 ? atoi(argv[1]) : 140;
+  const int neldiv = argc > 2 ? atoi(argv[2]) : 140;
   TPZGeoMesh *gmesh = createMeshWithGenGrid({neldiv, neldiv}, {0., 0.}, {2., 1.});
 
   if (print)
@@ -170,7 +170,7 @@ int main(int argc, char const *argv[]) {
   }
 
   // ----- Create computational mesh -----
-  const int pOrder = argc > 2 ? atoi(argv[2]) : 7;
+  const int pOrder = argc > 3 ? atoi(argv[3]) : 7;
   TPZCompMesh *cmesh = createCompMesh(gmesh, pOrder);
   if (print)
     cmesh->Print(std::cout);
@@ -188,7 +188,7 @@ int main(int argc, char const *argv[]) {
 
   auto stiff = an.StructMatrix();
   auto sparseMatrix = dynamic_cast<TPZSYsmpMatrix<STATE> *>(stiff->Create());
-  int64_t nnz = sparseMatrix->A().size();
+  MUMPS_INT nnz = sparseMatrix->A().size();
 
   an.Assemble();
 
@@ -210,11 +210,10 @@ int main(int argc, char const *argv[]) {
   double neopzSolveTime = 0.0;
   {
     OutputCapture capture;
-    {
-      TPZSimpleTimer t;
-      an.Solve();
-      neopzSolveTime = t.ReturnTimeDouble() / 1000.0; // convert to seconds
-    }
+
+    TPZSimpleTimer t;
+    an.Solve();
+    neopzSolveTime = t.ReturnTimeDouble() / 1000.0; // convert to seconds
 
     capturedOutput = capture.getOutput();
     metrics = capture.parseMumpsOutput(capturedOutput);
@@ -246,6 +245,9 @@ int main(int argc, char const *argv[]) {
 
     vtk.Do();
   }
+
+  std::cout << std::endl
+            << "Total execution time: " << totalTime.ReturnTimeDouble() / 1000.0 << " s" << std::endl;
 
   return 0;
 }
