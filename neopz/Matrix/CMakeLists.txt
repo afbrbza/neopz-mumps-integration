@@ -1,6 +1,6 @@
 # @file neopz/Matrix/CMakeLists.txt  -- CMake file for the Matrix module
 
-target_include_directories(firsttest PUBLIC
+target_include_directories(pzmumps PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/Matrix>
 )
@@ -20,7 +20,7 @@ set(sources
 )
 install(FILES ${headers} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Matrix)
 
-target_sources(firsttest PRIVATE ${headers} ${sources})
+target_sources(pzmumps PRIVATE ${headers} ${sources})
 
 #for doxygen
 foreach(header ${headers})

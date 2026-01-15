@@ -1,4 +1,4 @@
-target_include_directories(firsttest PUBLIC
+target_include_directories(pzmumps PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/Solvers>
     )
@@ -13,7 +13,7 @@ set(sources
 
 install(FILES ${public_headers} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Solvers)
 
-target_sources(firsttest PRIVATE ${public_headers} ${sources})
+target_sources(pzmumps PRIVATE ${public_headers} ${sources})
 
 #for doxygen
 foreach(header ${public_headers})

@@ -87,7 +87,7 @@ function(enable_mumps target)
     # 6. Linka MUMPS com OpenMP (sem MPI paralelo, usa libmpiseq)
     # ------------------------------------------------------------------------
     target_link_libraries(${target}
-        PRIVATE MUMPS::MUMPS
+        PUBLIC MUMPS::MUMPS
         OpenMP::OpenMP_CXX
         OpenMP::OpenMP_C
         "$<$<BOOL:${MPI_CXX_FOUND}>:MPI::MPI_CXX>"
