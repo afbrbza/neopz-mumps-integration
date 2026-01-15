@@ -164,7 +164,8 @@
             </div>
 
             <div class="stat-card">
-                <h3><span class="legend-icon pardiso-icon"></span>Pardiso <span id="pardisoMaxType">Max Speedup</span></h3>
+                <h3><span class="legend-icon pardiso-icon"></span>Pardiso <span id="pardisoMaxType">Max Speedup</span>
+                </h3>
                 <div class="value pardiso" id="pardisoMax">-</div>
                 <small>at <span id="pardisoMaxThreads">-</span> threads</small>
             </div>
@@ -204,40 +205,53 @@
                 if (i == 0 || !line) return; // Skip header
 
                 const [
-                    NumElementsPerDir,
-                    PolyOrder,
-                    NumEquations,
+                    NElemDir,
+                    POrder,
+                    NNZ,
+                    NEq,
                     Solver,
-                    NumSolverThreads,
-                    AssemblyTime_s,
-                    RealUsedThreadsAssembly,
+                    Threads,
+                    FactzTime_s,
+                    F_SpeedUP,
                     SolveTime_s,
-                    RealUsedThreadsSolve,
-                    SpeedUP
+                    S_SpeedUP,
+                    SolvPZTime_s,
+                    SPZ_SpeedUP
                 ] = line.split(',');
 
-                const neqPoly = `${NumEquations}-${PolyOrder}`;
-                eqFilterOptions[neqPoly] = `${NumEquations.replace(/\B(?=(\d{3})+(?!\d))/g, '.')} (PolyOrder ${PolyOrder})`;
-
+                const neqPoly = `${NEq}-${POrder}`;
+                eqFilterOptions[neqPoly] = `${NEq.replace(/\B(?=(\d{3})+(?!\d))/g, '.')} (PolyOrder ${POrder} - NNZ: ${NNZ.replace(/\B(?=(\d{3})+(?!\d))/g, '.')})`;
                 if (!fullDataset[neqPoly]) {
                     fullDataset[neqPoly] = {};
                 }
 
-                const iNumSolverThreads = parseInt(NumSolverThreads);
-                if (!fullDataset[neqPoly][NumSolverThreads]) {
-                    fullDataset[neqPoly][NumSolverThreads] = {
-                        threads: NumSolverThreads,
-                        mumps: { speedup: null, time: null },
-                        pardiso: { speedup: null, time: null }
+                const iNumSolverThreads = parseInt(Threads);
+                if (!fullDataset[neqPoly][Threads]) {
+                    fullDataset[neqPoly][Threads] = {
+                        threads: Threads,
+                        mumps_factorization: { speedup: null, time: null },
+                        pardiso_factorization: { speedup: null, time: null },
+                        mumps_solve: { speedup: null, time: null },
+                        pardiso_solve: { speedup: null, time: null },
+                        mumps_pz_solve: { speedup: null, time: null },
+                        pardiso_pz_solve: { speedup: null, time: null }
                     };
                 }
 
                 if (Solver === 'Pardiso') {
-                    fullDataset[neqPoly][iNumSolverThreads].pardiso.speedup = parseFloat(SpeedUP);
-                    fullDataset[neqPoly][iNumSolverThreads].pardiso.time = parseFloat(SolveTime_s);
+                    fullDataset[neqPoly][iNumSolverThreads].pardiso_factorization.speedup = parseFloat(F_SpeedUP);
+                    fullDataset[neqPoly][iNumSolverThreads].pardiso_factorization.time = parseFloat(FactzTime_s);
+                    fullDataset[neqPoly][iNumSolverThreads].pardiso_solve.speedup = parseFloat(S_SpeedUP);
+                    fullDataset[neqPoly][iNumSolverThreads].pardiso_solve.time = parseFloat(SolveTime_s);
+                    fullDataset[neqPoly][iNumSolverThreads].pardiso_pz_solve.speedup = parseFloat(SPZ_SpeedUP);
+                    fullDataset[neqPoly][iNumSolverThreads].pardiso_pz_solve.time = parseFloat(SolvPZTime_s);
                 } else if (Solver === 'MUMPS') {
-                    fullDataset[neqPoly][iNumSolverThreads].mumps.speedup = parseFloat(SpeedUP);
-                    fullDataset[neqPoly][iNumSolverThreads].mumps.time = parseFloat(SolveTime_s);
+                    fullDataset[neqPoly][iNumSolverThreads].mumps_factorization.speedup = parseFloat(F_SpeedUP);
+                    fullDataset[neqPoly][iNumSolverThreads].mumps_factorization.time = parseFloat(FactzTime_s);
+                    fullDataset[neqPoly][iNumSolverThreads].mumps_solve.speedup = parseFloat(S_SpeedUP);
+                    fullDataset[neqPoly][iNumSolverThreads].mumps_solve.time = parseFloat(SolveTime_s);
+                    fullDataset[neqPoly][iNumSolverThreads].mumps_pz_solve.speedup = parseFloat(SPZ_SpeedUP);
+                    fullDataset[neqPoly][iNumSolverThreads].mumps_pz_solve.time = parseFloat(SolvPZTime_s);
                 }
             });
 
@@ -257,25 +271,29 @@
                 const isSpeedup = chartType === 'chart_type_speedup';
 
                 // Cálculo de estatísticas
-                const mumpsVals = data.map(d => d.mumps[isSpeedup ? 'speedup' : 'time']);
-                const pardisoVals = data.map(d => d.pardiso[isSpeedup ? 'speedup' : 'time']);
+                const mumpsFactzVals = data.map(d => d.mumps_factorization[isSpeedup ? 'speedup' : 'time']);
+                const pardisoFactzVals = data.map(d => d.pardiso_factorization[isSpeedup ? 'speedup' : 'time']);
+                const mumpsSolveVals = data.map(d => d.mumps_solve[isSpeedup ? 'speedup' : 'time']);
+                const pardisoSolveVals = data.map(d => d.pardiso_solve[isSpeedup ? 'speedup' : 'time']);
+                const mumpsPZSolveVals = data.map(d => d.mumps_pz_solve[isSpeedup ? 'speedup' : 'time']);
+                const pardisoPZSolveVals = data.map(d => d.pardiso_pz_solve[isSpeedup ? 'speedup' : 'time']);
 
                 let mV, pV, mT, pT, mAvg, pAvg;
                 if (isSpeedup) {
-                    mV = Math.max(...mumpsVals);
-                    pV = Math.max(...pardisoVals);
-                    mT = data.find(d => d.mumps[isSpeedup ? 'speedup' : 'time'] === mV).threads;
-                    pT = data.find(d => d.pardiso[isSpeedup ? 'speedup' : 'time'] === pV).threads;
-                    mAvg = (mumpsVals.reduce((a, b) => a + b, 0) / mumpsVals.length).toFixed(3);
-                    pAvg = (pardisoVals.reduce((a, b) => a + b, 0) / pardisoVals.length).toFixed(3);
+                    mV = Math.max(...mumpsFactzVals);
+                    pV = Math.max(...pardisoFactzVals);
+                    mT = data.find(d => d.mumps_factorization[isSpeedup ? 'speedup' : 'time'] === mV).threads;
+                    pT = data.find(d => d.pardiso_factorization[isSpeedup ? 'speedup' : 'time'] === pV).threads;
+                    mAvg = (mumpsFactzVals.reduce((a, b) => a + b, 0) / mumpsFactzVals.length).toFixed(3);
+                    pAvg = (pardisoFactzVals.reduce((a, b) => a + b, 0) / pardisoFactzVals.length).toFixed(3);
 
                 } else {
-                    mV = Math.min(...mumpsVals);
-                    pV = Math.min(...pardisoVals);
-                    mT = data.find(d => d.mumps[isSpeedup ? 'speedup' : 'time'] === mV).threads;
-                    pT = data.find(d => d.pardiso[isSpeedup ? 'speedup' : 'time'] === pV).threads;
-                    mAvg = (mumpsVals.reduce((a, b) => a + b, 0) / mumpsVals.length).toFixed(3);
-                    pAvg = (pardisoVals.reduce((a, b) => a + b, 0) / pardisoVals.length).toFixed(3);
+                    mV = Math.min(...mumpsFactzVals);
+                    pV = Math.min(...pardisoFactzVals);
+                    mT = data.find(d => d.mumps_factorization[isSpeedup ? 'speedup' : 'time'] === mV).threads;
+                    pT = data.find(d => d.pardiso_factorization[isSpeedup ? 'speedup' : 'time'] === pV).threads;
+                    mAvg = (mumpsFactzVals.reduce((a, b) => a + b, 0) / mumpsFactzVals.length).toFixed(3);
+                    pAvg = (pardisoFactzVals.reduce((a, b) => a + b, 0) / pardisoFactzVals.length).toFixed(3);
                 }
 
                 // Atualização dos cards
@@ -292,9 +310,13 @@
 
                 // Atualização ou Criação do Gráfico
                 if (speedupChart) {
-                    speedupChart.data.datasets[0].data = mumpsVals;
-                    speedupChart.data.datasets[1].data = pardisoVals;
-                    speedupChart.data.datasets[2].hidden = !isSpeedup;
+                    speedupChart.data.datasets[0].data = mumpsFactzVals;
+                    speedupChart.data.datasets[1].data = pardisoFactzVals;
+                    speedupChart.data.datasets[2].data = mumpsSolveVals;
+                    speedupChart.data.datasets[3].data = pardisoSolveVals;
+                    speedupChart.data.datasets[4].data = mumpsPZSolveVals;
+                    speedupChart.data.datasets[5].data = pardisoPZSolveVals;
+                    speedupChart.data.datasets[6].hidden = !isSpeedup;
                     speedupChart.options.scales.y.title.text = isSpeedup ? 'Speedup' : 'Time (s)';
                     speedupChart.update();
                 } else {
@@ -304,24 +326,68 @@
                             labels: data.map(d => d.threads),
                             datasets: [
                                 {
-                                    label: 'MUMPS',
-                                    data: mumpsVals,
+                                    label: 'MUMPS Factorization',
+                                    data: mumpsFactzVals,
                                     borderColor: '#e74c3c',
                                     backgroundColor: 'rgba(231, 76, 60, 0.1)',
                                     borderWidth: 3,
                                     pointRadius: 5,
                                     tension: 0.3,
-                                    fill: true
+                                    // fill: true
                                 },
                                 {
-                                    label: 'Pardiso',
-                                    data: pardisoVals,
+                                    label: 'Pardiso Factorization',
+                                    data: pardisoFactzVals,
                                     borderColor: '#3498db',
                                     backgroundColor: 'rgba(52, 152, 219, 0.1)',
                                     borderWidth: 3,
                                     pointRadius: 5,
                                     tension: 0.3,
-                                    fill: true
+                                    // fill: true
+                                },
+                                {
+                                    label: 'MUMPS Solve',
+                                    data: mumpsSolveVals,
+                                    borderColor: '#533535',
+                                    backgroundColor: 'rgba(83, 53, 53, 0.1)',
+                                    borderWidth: 3,
+                                    pointRadius: 5,
+                                    tension: 0.3,
+                                    fill: true,
+                                    hidden: true
+                                },
+                                {
+                                    label: 'Pardiso Solve',
+                                    data: pardisoSolveVals,
+                                    borderColor: '#667eea',
+                                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                                    borderWidth: 3,
+                                    pointRadius: 5,
+                                    tension: 0.3,
+                                    fill: true,
+                                    hidden: true
+                                },
+                                {
+                                    label: 'MUMPS PZ Solve',
+                                    data: mumpsPZSolveVals,
+                                    borderColor: '#cd4b4a',
+                                    backgroundColor: 'rgba(205, 75, 74, 0.1)',
+                                    borderWidth: 3,
+                                    pointRadius: 5,
+                                    tension: 0.3,
+                                    fill: true,
+                                    hidden: true
+                                },
+                                {
+                                    label: 'Pardiso PZ Solve',
+                                    data: pardisoPZSolveVals,
+                                    borderColor: '#2e5bb7',
+                                    backgroundColor: 'rgba(46, 91, 183, 0.1)',
+                                    borderWidth: 3,
+                                    pointRadius: 5,
+                                    tension: 0.3,
+                                    fill: true,
+                                    hidden: true
                                 },
                                 {
                                     label: 'Ideal Speedup',

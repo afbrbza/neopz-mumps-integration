@@ -232,7 +232,6 @@ int main(int argc, char const *argv[]) {
             << "neopzSolveTime: " << std::fixed << std::setprecision(7) << neopzSolveTime << " s" << std::endl;
 
   // an.Run(); // assembles and solves the linear system
-  if (print)
     an.Solution().Print("Solution");
 
   if (print) {
