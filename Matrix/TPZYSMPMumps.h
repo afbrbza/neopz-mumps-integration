@@ -82,15 +82,15 @@ public :
   void UpdateCOOFormat();
   
   //! Get COO format arrays (1-based indexing for MUMPS)
-  void GetCOOFormat(TPZVec<int64_t> &irn, TPZVec<int64_t> &jcn) const;
+  void GetCOOFormat(TPZVec<MUMPS_INT> &irn, TPZVec<MUMPS_INT> &jcn) const;
   
 private:
   
   TPZMumpsSolver<TVar> fMumpsControl;
   
   // COO format arrays (1-based indexing for MUMPS)
-  mutable TPZManVector<int64_t> fIRN1Based;
-  mutable TPZManVector<int64_t> fJCN1Based;
+  mutable TPZManVector<MUMPS_INT> fIRN1Based;
+  mutable TPZManVector<MUMPS_INT> fJCN1Based;
   mutable bool fCOOValid{false};
 };
 

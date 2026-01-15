@@ -16,6 +16,7 @@ function(enable_mumps target)
         set(OpenMP_Fortran_LIBRARIES "" CACHE INTERNAL "")
     endif()
 
+    list(APPEND CMAKE_PREFIX_PATH "/opt/mumps")
 
     # ------------------------------------------------------------------------
     # 1. Localiza o pacote MUMPS

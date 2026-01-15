@@ -238,8 +238,8 @@ void TPZFYsmpMatrixMumps<TVar>::UpdateCOOFormat() {
         const long long row_start = this->fIA[i];
         const long long row_end = this->fIA[i + 1];
         for (long long pos = row_start; pos < row_end; pos++) {
-            fIRN1Based[k] = static_cast<int64_t>(i + 1);  // MUMPS uses 1-based indexing
-            fJCN1Based[k] = static_cast<int64_t>(this->fJA[pos] + 1);  // MUMPS uses 1-based indexing
+            fIRN1Based[k] = static_cast<MUMPS_INT>(i + 1);  // MUMPS uses 1-based indexing
+            fJCN1Based[k] = static_cast<MUMPS_INT>(this->fJA[pos] + 1);  // MUMPS uses 1-based indexing
             k++;
         }
     }
@@ -253,7 +253,7 @@ void TPZFYsmpMatrixMumps<TVar>::UpdateCOOFormat() {
 }
 
 template<class TVar>
-void TPZFYsmpMatrixMumps<TVar>::GetCOOFormat(TPZVec<int64_t> &irn, TPZVec<int64_t> &jcn) const {
+void TPZFYsmpMatrixMumps<TVar>::GetCOOFormat(TPZVec<MUMPS_INT> &irn, TPZVec<MUMPS_INT> &jcn) const {
     if (!fCOOValid) {
         const_cast<TPZFYsmpMatrixMumps<TVar>*>(this)->UpdateCOOFormat();
     }
@@ -264,6 +264,6 @@ void TPZFYsmpMatrixMumps<TVar>::GetCOOFormat(TPZVec<int64_t> &irn, TPZVec<int64_
 // Note: long double instantiations for completeness, even though MUMPS
 // doesn't natively support long double (uses double precision internally)
 template void TPZFYsmpMatrixMumps<long double>::UpdateCOOFormat();
-template void TPZFYsmpMatrixMumps<long double>::GetCOOFormat(TPZVec<int64_t>&, TPZVec<int64_t>&) const;
+template void TPZFYsmpMatrixMumps<long double>::GetCOOFormat(TPZVec<MUMPS_INT>&, TPZVec<MUMPS_INT>&) const;
 template void TPZFYsmpMatrixMumps<std::complex<long double>>::UpdateCOOFormat();
-template void TPZFYsmpMatrixMumps<std::complex<long double>>::GetCOOFormat(TPZVec<int64_t>&, TPZVec<int64_t>&) const;
+template void TPZFYsmpMatrixMumps<std::complex<long double>>::GetCOOFormat(TPZVec<MUMPS_INT>&, TPZVec<MUMPS_INT>&) const;

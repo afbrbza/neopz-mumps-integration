@@ -14,7 +14,7 @@
 
 /*auxiliary functions*/
 template <typename TVar>
-void Error_check(int64_t error, TVar info2);
+void Error_check(MUMPS_INT error, TVar info2);
 
 template <class TVar>
 int DataType([[maybe_unused]] TVar a);
@@ -28,7 +28,7 @@ template <class TVar>
 TPZMumpsSolver<TVar>::TPZMumpsSolver() : TPZMatrixSolver<TVar>() {}
 
 template <class TVar>
-TPZMumpsSolver<TVar>::TPZMumpsSolver(TPZMumpsSolver &&copy) noexcept 
+TPZMumpsSolver<TVar>::TPZMumpsSolver(TPZMumpsSolver &&copy) noexcept
     : TPZMatrixSolver<TVar>(std::move(copy)),
       fSymmetry(copy.fSymmetry),
       fProperty(copy.fProperty),
@@ -48,14 +48,14 @@ TPZMumpsSolver<TVar>::TPZMumpsSolver(TPZMumpsSolver &&copy) noexcept
 }
 
 template <class TVar>
-TPZMumpsSolver<TVar>& TPZMumpsSolver<TVar>::operator=(TPZMumpsSolver &&copy) noexcept {
+TPZMumpsSolver<TVar> &TPZMumpsSolver<TVar>::operator=(TPZMumpsSolver &&copy) noexcept {
   if (this != &copy) {
     // Free our own MUMPS memory first
     FreeMumpsMemory();
-    
+
     // Move base class
     TPZMatrixSolver<TVar>::operator=(std::move(copy));
-    
+
     // Move members
     fSymmetry = copy.fSymmetry;
     fProperty = copy.fProperty;
@@ -69,7 +69,7 @@ TPZMumpsSolver<TVar>& TPZMumpsSolver<TVar>::operator=(TPZMumpsSolver &&copy) noe
     fDecomposed = copy.fDecomposed;
     fMumpsInitialized = copy.fMumpsInitialized;
     fCustomSettings = copy.fCustomSettings;
-    
+
     // Mark source as uninitialized so it won't try to free MUMPS memory
     copy.fMumpsInitialized = false;
     copy.fDecomposed = false;
@@ -91,7 +91,7 @@ void TPZMumpsSolver<TVar>::FreeMumpsMemory() {
       std::cerr << "MUMPS Error during memory deallocation: "
                 << "INFO(1) = " << fMumpsData.info[0]
                 << ", INFO(2) = " << fMumpsData.info[1] << std::endl;
-      Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
+      Error_check(MUMPS_INT(fMumpsData.info[0]), fMumpsData.info[1]);
       DebugStop();
     }
 
@@ -129,7 +129,7 @@ void TPZMumpsSolver<TVar>::SetMatrix(TPZAutoPointer<TPZBaseMatrix> refmat) {
 
 template <class TVar>
 void TPZMumpsSolver<TVar>::Solve(const TPZFMatrix<TVar> &rhs, TPZFMatrix<TVar> &sol, TPZFMatrix<TVar> *res) {
-  
+
   if (!this->Matrix()) {
     PZError << __PRETTY_FUNCTION__;
     PZError << " called without a matrix pointer\n";
@@ -164,23 +164,23 @@ void TPZMumpsSolver<TVar>::Decompose(TPZMatrix<TVar> *mat) {
   auto *symSystem = dynamic_cast<TPZSYsmpMatrixMumps<TVar> *>(mat);
   auto *nSymSystem = dynamic_cast<TPZFYsmpMatrixMumps<TVar> *>(mat);
 
-  long long n = 0;    // number of equations
+  MUMPS_INT n = 0;    // number of equations
   TVar *a;            // array of non zero values
-  long long *ia, *ja; // row and column indices
+  MUMPS_INT *ia, *ja; // row and column indices
 
   if (symSystem) { // symmetric matrix
     if (symSystem->Rows() == 0) {
       return;
     }
     a = &(symSystem->fA[0]);
-    ia = (long long *)&(symSystem->fIA[0]);
-    ja = (long long *)&(symSystem->fJA[0]);
+    ia = (MUMPS_INT *)&(symSystem->fIA[0]);
+    ja = (MUMPS_INT *)&(symSystem->fJA[0]);
     n = symSystem->Rows();
   }
   if (nSymSystem) { // non symmetric matrix
     a = &(nSymSystem->fA[0]);
-    ia = (long long *)&(nSymSystem->fIA[0]);
-    ja = (long long *)&(nSymSystem->fJA[0]);
+    ia = (MUMPS_INT *)&(nSymSystem->fIA[0]);
+    ja = (MUMPS_INT *)&(nSymSystem->fJA[0]);
     n = nSymSystem->Rows();
   }
 
@@ -204,16 +204,16 @@ void TPZMumpsSolver<TVar>::Decompose(TPZMatrix<TVar> *mat) {
       std::cerr << "MUMPS Error during initialization: "
                 << "INFO(1) = " << fMumpsData.info[0]
                 << ", INFO(2) = " << fMumpsData.info[1] << std::endl;
-      Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
+      Error_check(MUMPS_INT(fMumpsData.info[0]), fMumpsData.info[1]);
       DebugStop();
     }
     fMumpsInitialized = true;
   }
 
-  long long nnz = (symSystem) ? symSystem->fA.size() : nSymSystem->fA.size();
+  MUMPS_INT nnz = (symSystem) ? symSystem->fA.size() : nSymSystem->fA.size();
 
   // Get COO format from matrix (conversion done once in matrix class)
-  TPZVec<int64_t> irn, jcn;
+  TPZVec<MUMPS_INT> irn, jcn;
   if (symSystem) {
     symSystem->GetCOOFormat(irn, jcn);
   } else {
@@ -226,151 +226,150 @@ void TPZMumpsSolver<TVar>::Decompose(TPZMatrix<TVar> *mat) {
   fMumpsData.jcn = jcn.begin();
   fMumpsData.a = reinterpret_cast<DMUMPS_REAL *>(a);
 
-  // Set MUMPS control parameters
+  /**
+   * INCTL(1): is the output stream for error messages
+   *
+   * Possible values:
+   * ≤ 0: these messages will be suppressed.
+   * > 0 : is the output stream.
+   * Default value: 6 (standard output stream)
+   */
+  fMumpsData.icntl[0] = fICNTL[0].has_value() ? fICNTL[0].value() : (fMessageLevel ? 6 : -1);
+
+  /**
+   * INCTL(2): is the output stream for diagnostic printing and statistics local to each MPI process.
+   *
+   * Possible values:
+   * ≤ 0: these messages will be suppressed.
+   * > 0 : is the output stream.
+   * Default value: 0
+   * Remarks: If ICNTL(2) > 0 and ICNTL(4) ≥ 2, then information on advancement (flops done)
+   * is also printed.
+   */
+  fMumpsData.icntl[1] = fICNTL[1].has_value() ? fICNTL[1].value() : (fMessageLevel ? 6 : -1);
+
+  /**
+   * ICNTL(3) is the output stream for global information, collected on the host.
+   *
+   * Possible values:
+   * ≤ 0: these messages will be suppressed.
+   * > 0 : is the output stream.
+   * Default value: 6 (standard output stream)
+   */
+  fMumpsData.icntl[2] = fICNTL[2].has_value() ? fICNTL[2].value() : (fMessageLevel > 0 ? 6 : -1);
+
+  /**
+   * ICNTL(4) is the level of printing for error, warning, and diagnostic messages.
+   *
+   * Possible values:
+   * ≤ 0: No messages output.
+   * 1 : Only error messages printed.
+   * 2 : Errors, warnings, and main statistics printed.
+   * 3 : Errors and warnings and terse diagnostics (only first ten entries of arrays) printed.
+   * ≥ 4 : Errors, warnings and information on input, output parameters printed.
+   * Default value: 2 (errors, warnings and main statistics printed)
+   */
+  fMumpsData.icntl[3] = fICNTL[3].has_value() ? fICNTL[3].value() : (fMessageLevel);
+
+  /**
+   * ICNTL(5) controls the matrix input format
+   *
+   * Phase: accessed by the host and only during the analysis phase
+   * Possible variables/arrays involved: N, NNZ (or NZ for backward compatibility), IRN, JCN,
+   *    NNZ loc (or NZ loc for backward compatibility), IRN loc, JCN loc, A loc, NELT, ELTPTR,
+   *    ELTVAR, and A ELT
+   *
+   * Possible values:
+   * 0: assembled format
+   * 1: elemental format. The matrix must be input in the structure components N, NELT, ELTPTR, ELTVAR, and A ELT
+   */
+  fMumpsData.icntl[4] = fICNTL[4].has_value() ? fICNTL[4].value() : (0);
+
+  /**
+   * ICNTL(6) computes a permutation to permute the matrix to a zero-free diagonal and/or computes a matrix scaling
+   * Phase: accessed by the host and only during sequential analysis
+   * Possible values:
+   * 0 : No column permutation is computed.
+   * 1 : The permuted matrix has as many entries on its diagonal as possible. The values on the diagonal are of arbitrary size.
+   * 2 : The permutation is such that the smallest value on the diagonal of the permuted matrix is maximized. The numerical values of the original matrix, (mumps par%A), must be provided by the user during the analysis phase.
+   * 3 : Variant of option 2 with different performance. The numerical values of the original matrix (mumps par%A) must be provided by the user during the analysis phase.
+   * 4 : The sum of the diagonal entries of the permuted matrix is maximized. The numerical values of the original matrix (mumps par%A) must be provided by the user during the analysis phase.
+   * 5 : The product of the diagonal entries of the permuted matrix is maximized.
+   * 6 : Similar to 5 but with a more costly (time and memory footprint) algorithm. The numerical values of the original matrix, mumps par%A, must be provided by the user during the analysis phase.
+   * 7 : Based on the structural symmetry of the input matrix and on the availability of the numerical values, the value of ICNTL(6) is automatically chosen by the software.
+   *
+   * Default value: 7 (automatic choice done by the package)
+   */
+  fMumpsData.icntl[5] = fICNTL[5].has_value() ? fICNTL[5].value() : (7);
+
+  /**
+   * ICNTL(7) computes a symmetric permutation (ordering) to determine the pivot order to be used for the factorization
+   *
+   * Possible values:
+   * 0: Approximate Minimum Degree (AMD) is used
+   * 1: The pivot order should be set by the user in PERM IN, on the host processor
+   * 2: Approximate Minimum Fill (AMF) is used
+   * 3: SCOTCH is used if installed by user, otherwise treats as 7
+   * 4: PORD is used if installed by user, otherwise treats as 7
+   * 5: METIS is used if installed by user, otherwise treats as 7
+   * 6: Approximate Minimum Degree with automatic quasi-dense row detection (QAMD) is used
+   * 7: Automatic choice done by the package
+   */
+  fMumpsData.icntl[6] = fICNTL[6].has_value() ? fICNTL[6].value() : (7);
+
+  /**
+   * ICNTL(13) controls the parallelism of the root node (enabling or not the use of ScaLAPACK) and also its splitting.
+   *
+   * Phase: accessed by the host during the analysis phase.
+   * Possible values :
+   * < -1 : treated as 0.
+   * -1 : force splitting of the root node in all cases (even sequentially)
+   * 0 : parallel factorization of the root node based on ScaLAPACK.
+   * > 0 : ScaLAPACK is not used (recommended value is 1 to partly recover parallelism of the root node). It forces a sequential factorization of the root node (ScaLAPACK will not be used).
+   *
+   * Default value: 0 (parallel factorization on the root node)
+   */
+  fMumpsData.icntl[12] = fICNTL[12].has_value() ? fICNTL[12].value() : (0);
+
+  /**
+   * ICNTL(14) controls the percentage increase in the estimated working space
+   *
+   * Phase: accessed by the host both during the analysis and the factorization phases.
+   * Default value: between 20 and 35 (which corresponds to at most 35 % increase) and depends on
+   * the number of MPI processes. It is set to 5 % with SYM=1 and one MPI process.
+   */
+  fMumpsData.icntl[13] = fICNTL[13].has_value() ? fICNTL[13].value() : (35);
+
+  /**
+   * ICNTL(18) defines the strategy for the distributed input matrix (only for assembled matrix).
+   *
+   * Phase: accessed by the host during the analysis phase.
+   * Possible values :
+   * 0 : the input matrix is centralized on the host (see Subsection 5.4.2.1).
+   * 1 : the user provides the structure of the matrix on the host at analysis, MUMPS returns a mapping and the user should then provide the matrix entries distributed according to the mapping on entry to the numerical factorization phase.
+   * 2 : the user provides the structure of the matrix on the host at analysis, and the distributed matrix entries on all slave processors at factorization. Any distribution is allowed
+   * 3 : user directly provides the distributed matrix, pattern and entries, input both for analysis and factorization.
+   *
+   * Other values are treated as 0.
+   * Default value: 0 (input matrix centralized on the host)
+   */
+  fMumpsData.icntl[17] = fICNTL[17].has_value() ? fICNTL[17].value() : (0);
+
+  /**
+   * ICNTL(28) determines whether a sequential or parallel computation of the ordering is performed
+   *
+   * Phase: accessed by the host process during the analysis phase.
+   * Possible values:
+   * 0: automatic choice.
+   * 1: sequential computation. In this case the ordering method is set by ICNTL(7) and the ICNTL(29) parameter is meaningless (choice of the parallel ordering tool).
+   * 2: parallel computation. A parallel ordering and parallel symbolic factorization is requested by the user.
+   *
+   * Any other values will be treated as 0.
+   * Default value: 0 (automatic choice)
+   */
+  fMumpsData.icntl[27] = fICNTL[27].has_value() ? fICNTL[27].value() : (0);
+
   if (!fCustomSettings) {
-    /**
-     * INCTL(1): is the output stream for error messages
-     *
-     * Possible values:
-     * ≤ 0: these messages will be suppressed.
-     * > 0 : is the output stream.
-     * Default value: 6 (standard output stream)
-     */
-    fMumpsData.icntl[0] = fMessageLevel ? 6 : -1;
-
-    /**
-     * INCTL(2): is the output stream for diagnostic printing and statistics local to each MPI process.
-     *
-     * Possible values:
-     * ≤ 0: these messages will be suppressed.
-     * > 0 : is the output stream.
-     * Default value: 0
-     * Remarks: If ICNTL(2) > 0 and ICNTL(4) ≥ 2, then information on advancement (flops done)
-     * is also printed.
-     */
-    fMumpsData.icntl[1] = fMessageLevel ? 6 : -1;
-
-    /**
-     * ICNTL(3) is the output stream for global information, collected on the host.
-     *
-     * Possible values:
-     * ≤ 0: these messages will be suppressed.
-     * > 0 : is the output stream.
-     * Default value: 6 (standard output stream)
-     */
-    fMumpsData.icntl[2] = fMessageLevel > 0 ? 6 : -1;
-
-    /**
-     * ICNTL(4) is the level of printing for error, warning, and diagnostic messages.
-     *
-     * Possible values:
-     * ≤ 0: No messages output.
-     * 1 : Only error messages printed.
-     * 2 : Errors, warnings, and main statistics printed.
-     * 3 : Errors and warnings and terse diagnostics (only first ten entries of arrays) printed.
-     * ≥ 4 : Errors, warnings and information on input, output parameters printed.
-     * Default value: 2 (errors, warnings and main statistics printed)
-     */
-    fMumpsData.icntl[3] = fMessageLevel;
-
-    /**
-     * ICNTL(5) controls the matrix input format
-     *
-     * Phase: accessed by the host and only during the analysis phase
-     * Possible variables/arrays involved: N, NNZ (or NZ for backward compatibility), IRN, JCN,
-     *    NNZ loc (or NZ loc for backward compatibility), IRN loc, JCN loc, A loc, NELT, ELTPTR,
-     *    ELTVAR, and A ELT
-     *
-     * Possible values:
-     * 0: assembled format
-     * 1: elemental format. The matrix must be input in the structure components N, NELT, ELTPTR, ELTVAR, and A ELT
-     */
-    fMumpsData.icntl[4] = 0;
-
-    /**
-     * ICNTL(6) computes a permutation to permute the matrix to a zero-free diagonal and/or computes a matrix scaling
-     * Phase: accessed by the host and only during sequential analysis
-     * Possible values:
-     * 0 : No column permutation is computed.
-     * 1 : The permuted matrix has as many entries on its diagonal as possible. The values on the diagonal are of arbitrary size.
-     * 2 : The permutation is such that the smallest value on the diagonal of the permuted matrix is maximized. The numerical values of the original matrix, (mumps par%A), must be provided by the user during the analysis phase.
-     * 3 : Variant of option 2 with different performance. The numerical values of the original matrix (mumps par%A) must be provided by the user during the analysis phase.
-     * 4 : The sum of the diagonal entries of the permuted matrix is maximized. The numerical values of the original matrix (mumps par%A) must be provided by the user during the analysis phase.
-     * 5 : The product of the diagonal entries of the permuted matrix is maximized.
-     * 6 : Similar to 5 but with a more costly (time and memory footprint) algorithm. The numerical values of the original matrix, mumps par%A, must be provided by the user during the analysis phase.
-     * 7 : Based on the structural symmetry of the input matrix and on the availability of the numerical values, the value of ICNTL(6) is automatically chosen by the software.
-     *
-     * Default value: 7 (automatic choice done by the package)
-     */
-    fMumpsData.icntl[5] = 7;
-
-    /**
-     * ICNTL(7) computes a symmetric permutation (ordering) to determine the pivot order to be used for the factorization
-     *
-     * Possible values:
-     * 0: Approximate Minimum Degree (AMD) is used
-     * 1: The pivot order should be set by the user in PERM IN, on the host processor
-     * 2: Approximate Minimum Fill (AMF) is used
-     * 3: SCOTCH is used if installed by user, otherwise treats as 7
-     * 4: PORD is used if installed by user, otherwise treats as 7
-     * 5: METIS is used if installed by user, otherwise treats as 7
-     * 6: Approximate Minimum Degree with automatic quasi-dense row detection (QAMD) is used
-     * 7: Automatic choice done by the package
-     */
-    fMumpsData.icntl[6] = 7;
-
-    /**
-     * ICNTL(13) controls the parallelism of the root node (enabling or not the use of ScaLAPACK) and also its splitting.
-     *
-     * Phase: accessed by the host during the analysis phase.
-     * Possible values :
-     * < -1 : treated as 0.
-     * -1 : force splitting of the root node in all cases (even sequentially)
-     * 0 : parallel factorization of the root node based on ScaLAPACK.
-     * > 0 : ScaLAPACK is not used (recommended value is 1 to partly recover parallelism of the root node). It forces a sequential factorization of the root node (ScaLAPACK will not be used).
-     *
-     * Default value: 0 (parallel factorization on the root node)
-     */
-    fMumpsData.icntl[12] = 0;
-
-    /**
-     * ICNTL(14) controls the percentage increase in the estimated working space
-     *
-     * Phase: accessed by the host both during the analysis and the factorization phases.
-     * Default value: between 20 and 35 (which corresponds to at most 35 % increase) and depends on
-     * the number of MPI processes. It is set to 5 % with SYM=1 and one MPI process.
-     */
-    fMumpsData.icntl[13] = 35;
-
-    /**
-     * ICNTL(18) defines the strategy for the distributed input matrix (only for assembled matrix).
-     *
-     * Phase: accessed by the host during the analysis phase.
-     * Possible values :
-     * 0 : the input matrix is centralized on the host (see Subsection 5.4.2.1).
-     * 1 : the user provides the structure of the matrix on the host at analysis, MUMPS returns a mapping and the user should then provide the matrix entries distributed according to the mapping on entry to the numerical factorization phase.
-     * 2 : the user provides the structure of the matrix on the host at analysis, and the distributed matrix entries on all slave processors at factorization. Any distribution is allowed
-     * 3 : user directly provides the distributed matrix, pattern and entries, input both for analysis and factorization.
-     *
-     * Other values are treated as 0.
-     * Default value: 0 (input matrix centralized on the host)
-     */
-    fMumpsData.icntl[17] = 0;
-
-    /**
-     * ICNTL(28) determines whether a sequential or parallel computation of the ordering is performed
-     *
-     * Phase: accessed by the host process during the analysis phase.
-     * Possible values:
-     * 0: automatic choice.
-     * 1: sequential computation. In this case the ordering method is set by ICNTL(7) and the ICNTL(29) parameter is meaningless (choice of the parallel ordering tool).
-     * 2: parallel computation. A parallel ordering and parallel symbolic factorization is requested by the user.
-     *
-     * Any other values will be treated as 0.
-     * Default value: 0 (automatic choice)
-     */
-    fMumpsData.icntl[27] = 0;
-
     /**
      * CNTL(1) is the relative threshold for numerical pivoting.
      *
@@ -388,20 +387,20 @@ void TPZMumpsSolver<TVar>::Decompose(TPZMatrix<TVar> *mat) {
      * 0.0: for symmetric positive definite matrices
      */
     fMumpsData.cntl[0] = -1.0;
+  }
 
-    /**
-     * ICNTL(24) controls the detection of “null pivot rows”.
-     * Phase: accessed by the host during the factorization phase
-     * Possible variables/arrays involved: PIVNUL LIST
-     * Possible values :
-     * 0: Nothing done. A null pivot row will result in error INFO(1)=-10.
-     * 1: Null pivot row detection.
-     * Other values are treated as 0.
-     * Default value: 0 (no null pivot row detection)
-     */
-    if (fProperty == MProperty::EIndefinite) {
-      fMumpsData.icntl[23] = 1;
-    }
+  /**
+   * ICNTL(24) controls the detection of “null pivot rows”.
+   * Phase: accessed by the host during the factorization phase
+   * Possible variables/arrays involved: PIVNUL LIST
+   * Possible values :
+   * 0: Nothing done. A null pivot row will result in error INFO(1)=-10.
+   * 1: Null pivot row detection.
+   * Other values are treated as 0.
+   * Default value: 0 (no null pivot row detection)
+   */
+  if (fProperty == MProperty::EIndefinite) {
+    fMumpsData.icntl[23] = fICNTL[23].has_value() ? fICNTL[23].value() : (1);
   }
 
   // --- Analysis phase
@@ -412,7 +411,7 @@ void TPZMumpsSolver<TVar>::Decompose(TPZMatrix<TVar> *mat) {
     std::cerr << "MUMPS analysis error: "
               << "INFO(1) = " << fMumpsData.info[0]
               << ", INFO(2) = " << fMumpsData.info[1] << std::endl;
-    Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
+    Error_check(MUMPS_INT(fMumpsData.info[0]), fMumpsData.info[1]);
     DebugStop();
   }
 
@@ -424,7 +423,7 @@ void TPZMumpsSolver<TVar>::Decompose(TPZMatrix<TVar> *mat) {
     std::cerr << "MUMPS factorization error: "
               << "INFO(1) = " << fMumpsData.info[0]
               << ", INFO(2) = " << fMumpsData.info[1] << std::endl;
-    Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
+    Error_check(MUMPS_INT(fMumpsData.info[0]), fMumpsData.info[1]);
     DebugStop();
   }
 
@@ -434,7 +433,7 @@ void TPZMumpsSolver<TVar>::Decompose(TPZMatrix<TVar> *mat) {
 /// Use the decomposed matrix to invert the system of equations
 template <class TVar>
 void TPZMumpsSolver<TVar>::Solve(const TPZMatrix<TVar> *mat, const TPZFMatrix<TVar> &rhs, TPZFMatrix<TVar> &sol) const {
-  
+
 #ifdef PZDEBUG
   if (!fDecomposed) {
     PZError << __PRETTY_FUNCTION__;
@@ -505,7 +504,7 @@ void TPZMumpsSolver<TVar>::Solve(const TPZMatrix<TVar> *mat, const TPZFMatrix<TV
     std::cerr << "fMumpsInitialized = " << fMumpsInitialized << std::endl;
     DebugStop();
   }
-  
+
   if (!fDecomposed) {
     std::cerr << "MUMPS Error: Matrix was not decomposed before solving.\n";
     std::cerr << "fDecomposed = " << fDecomposed << std::endl;
@@ -522,7 +521,7 @@ void TPZMumpsSolver<TVar>::Solve(const TPZMatrix<TVar> *mat, const TPZFMatrix<TV
     std::cerr << "MUMPS solve error: "
               << "INFO(1) = " << fMumpsData.info[0]
               << ", INFO(2) = " << fMumpsData.info[1] << std::endl;
-    Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
+    Error_check(MUMPS_INT(fMumpsData.info[0]), fMumpsData.info[1]);
 
     // Try refactorization if there was an error
     if (fMumpsData.info[0] == -10 || fMumpsData.info[0] == -13) {
@@ -535,7 +534,7 @@ void TPZMumpsSolver<TVar>::Solve(const TPZMatrix<TVar> *mat, const TPZFMatrix<TV
       if (fMumpsData.info[0] < 0) {
         std::cerr << "MUMPS re-analysis error: "
                   << "INFO(1) = " << fMumpsData.info[0] << std::endl;
-        Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
+        Error_check(MUMPS_INT(fMumpsData.info[0]), fMumpsData.info[1]);
         DebugStop();
       }
 
@@ -545,7 +544,7 @@ void TPZMumpsSolver<TVar>::Solve(const TPZMatrix<TVar> *mat, const TPZFMatrix<TV
       if (fMumpsData.info[0] < 0) {
         std::cerr << "MUMPS re-factorization error: "
                   << "INFO(1) = " << fMumpsData.info[0] << std::endl;
-        Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
+        Error_check(MUMPS_INT(fMumpsData.info[0]), fMumpsData.info[1]);
         DebugStop();
       }
 
@@ -557,7 +556,7 @@ void TPZMumpsSolver<TVar>::Solve(const TPZMatrix<TVar> *mat, const TPZFMatrix<TV
       if (fMumpsData.info[0] < 0) {
         std::cerr << "MUMPS solve error after refactorization: "
                   << "INFO(1) = " << fMumpsData.info[0] << std::endl;
-        Error_check(int64_t(fMumpsData.info[0]), fMumpsData.info[1]);
+        Error_check(MUMPS_INT(fMumpsData.info[0]), fMumpsData.info[1]);
         DebugStop();
       }
     } else {
@@ -641,19 +640,25 @@ TPZMumpsSolver<TVar> *TPZMumpsSolver<TVar>::Clone() const {
   return newSolver;
 }
 
+/**
+ * Sets a specific ICNTL parameter to a custom value.
+ * Note: MUMPS uses 1-based indexing for ICNTL parameters.
+ * @param index Index of the ICNTL parameter (1 to 60)
+ * @param value Value to set for the ICNTL parameter
+ */
 template <class TVar>
 void TPZMumpsSolver<TVar>::SetICNTL(int index, MUMPS_INT value) {
   const int max_size = 60; // ICNTL array size in MUMPS
   if (index < 1 || index > max_size) {
     PZError << __PRETTY_FUNCTION__
             << "\nInvalid ICNTL index!"
-            << "\nExpected index between 1 and " << max_size 
+            << "\nExpected index between 1 and " << max_size
             << " but got " << index
             << "\nAborting..." << std::endl;
     DebugStop();
   }
   // MUMPS uses 1-based indexing, C++ uses 0-based
-  fMumpsData.icntl[index - 1] = value;
+  fICNTL[index - 1] = value;
   fCustomSettings = true;
 }
 
@@ -666,11 +671,10 @@ void TPZMumpsSolver<TVar>::ResetICNTL() {
 
 template <class TVar>
 void TPZMumpsSolver<TVar>::SetMatrixType(SymProp symtype, MProperty prop) {
-  
+
   fSymmetry = symtype;
   fProperty = prop;
   fMatrixType = MatrixType();
-  
 }
 
 template <class TVar>
@@ -714,79 +718,75 @@ long long TPZMumpsSolver<TVar>::MatrixType() {
     }
   }
 
-  // Remove it to avoid the risk of starting twice.
-  // InitMUMPS();
+  // ICNTL(1-3): Output streams
+  fMumpsData.icntl[0] = fICNTL[0].has_value() ? fICNTL[0].value() : (fMessageLevel > 0 ? 6 : -1); // Error messages
+  fMumpsData.icntl[1] = fICNTL[1].has_value() ? fICNTL[1].value() : (fMessageLevel > 1 ? 6 : -1); // Diagnostics
+  fMumpsData.icntl[2] = fICNTL[2].has_value() ? fICNTL[2].value() : (fMessageLevel > 0 ? 6 : -1); // Global info
 
-  // Set default MUMPS parameters if not using custom settings
+  // ICNTL(4): Print level
+  fMumpsData.icntl[3] = fICNTL[3].has_value() ? fICNTL[3].value() : (fMessageLevel);
+
+  // ICNTL(5): Matrix format (0 = assembled/elemental)
+  fMumpsData.icntl[4] = fICNTL[4].has_value() ? fICNTL[4].value() : (0);
+
+  // ICNTL(6): Permutation for input matrix (0 = automatic)
+  fMumpsData.icntl[5] = fICNTL[5].has_value() ? fICNTL[5].value() : (0);
+
+  // ICNTL(7): Ordering strategy
+  // 7 = automatic, 5 = METIS, 0 = AMD
+  fMumpsData.icntl[6] = fICNTL[6].has_value() ? fICNTL[6].value() : (7);
+
+  // ICNTL(8): Scaling strategy
+  // 77 = automatic, -1 = none
+  fMumpsData.icntl[7] = fICNTL[7].has_value() ? fICNTL[7].value() : (77);
+
+  // ICNTL(10): Max steps of iterative refinement
+  fMumpsData.icntl[9] = fICNTL[9].has_value() ? fICNTL[9].value() : (0); // Default: no iterative refinement
+
+  // ICNTL(11): Error analysis
+  // 0 = no statistics, 1 = compute statistics
+  fMumpsData.icntl[10] = fICNTL[10].has_value() ? fICNTL[10].value() : (1);
+
+  // ICNTL(12): Ordering for symmetric matrices
+  // 0 = automatic, 1 = use A+A^T
+  fMumpsData.icntl[11] = fICNTL[11].has_value() ? fICNTL[11].value() : (0);
+
+  // ICNTL(13): ScaLAPACK (sequential: always 0)
+  fMumpsData.icntl[12] = fICNTL[12].has_value() ? fICNTL[12].value() : (0);
+
+  // ICNTL(14): Percentage increase in estimated working space
+  fMumpsData.icntl[13] = fICNTL[13].has_value() ? fICNTL[13].value() : (20);
+
+  // ICNTL(18): Distributed matrix strategy
+  // 0 = centralized on host (sequential)
+  fMumpsData.icntl[17] = fICNTL[17].has_value() ? fICNTL[17].value() : (0);
+
+  // ICNTL(19): Schur complement (0 = no Schur)
+  fMumpsData.icntl[18] = fICNTL[18].has_value() ? fICNTL[18].value() : (0);
+
+  // ICNTL(20): RHS format (0 = dense)
+  fMumpsData.icntl[19] = fICNTL[19].has_value() ? fICNTL[19].value() : (0);
+
+  // ICNTL(21): Solution format (0 = centralized)
+  fMumpsData.icntl[20] = fICNTL[20].has_value() ? fICNTL[20].value() : (0);
+
+  // ICNTL(22): Out-of-core factorization (0 = in-core)
+  fMumpsData.icntl[21] = fICNTL[21].has_value() ? fICNTL[21].value() : (0);
+
+  // ICNTL(23): Maximum memory for working space (0 = automatic)
+  fMumpsData.icntl[22] = fICNTL[22].has_value() ? fICNTL[22].value() : (0);
+
+  // ICNTL(24): Null space detection (0 = no)
+  fMumpsData.icntl[23] = fICNTL[23].has_value() ? fICNTL[23].value() : (0);
+
+  // ICNTL(28): Parallel ordering (0 = sequential, 1 = PT-SCOTCH, 2 = ParMetis)
+  // For sequential MUMPS, always use 0
+  fMumpsData.icntl[27] = fICNTL[27].has_value() ? fICNTL[27].value() : (0);
+
+  // ICNTL(29): Parallel ordering method details
+  fMumpsData.icntl[28] = fICNTL[28].has_value() ? fICNTL[28].value() : (0);
+
   if (!fCustomSettings) {
-    // ICNTL(1-3): Output streams
-    fMumpsData.icntl[0] = fMessageLevel > 0 ? 6 : -1; // Error messages
-    fMumpsData.icntl[1] = fMessageLevel > 1 ? 6 : -1; // Diagnostics
-    fMumpsData.icntl[2] = fMessageLevel > 0 ? 6 : -1; // Global info
-
-    // ICNTL(4): Print level
-    fMumpsData.icntl[3] = fMessageLevel;
-
-    // ICNTL(5): Matrix format (0 = assembled/elemental)
-    fMumpsData.icntl[4] = 0;
-
-    // ICNTL(6): Permutation for input matrix (0 = automatic)
-    fMumpsData.icntl[5] = 0;
-
-    // ICNTL(7): Ordering strategy
-    // 7 = automatic, 5 = METIS, 0 = AMD
-    fMumpsData.icntl[6] = 7;
-
-    // ICNTL(8): Scaling strategy
-    // 77 = automatic, -1 = none
-    fMumpsData.icntl[7] = 77;
-
-    // ICNTL(10): Max steps of iterative refinement
-    fMumpsData.icntl[9] = 0; // Default: no iterative refinement
-
-    // ICNTL(11): Error analysis
-    // 0 = no statistics, 1 = compute statistics
-    fMumpsData.icntl[10] = 1;
-
-    // ICNTL(12): Ordering for symmetric matrices
-    // 0 = automatic, 1 = use A+A^T
-    fMumpsData.icntl[11] = 0;
-
-    // ICNTL(13): ScaLAPACK (sequential: always 0)
-    fMumpsData.icntl[12] = 0;
-
-    // ICNTL(14): Percentage increase in estimated working space
-    fMumpsData.icntl[13] = 20;
-
-    // ICNTL(18): Distributed matrix strategy
-    // 0 = centralized on host (sequential)
-    fMumpsData.icntl[17] = 0;
-
-    // ICNTL(19): Schur complement (0 = no Schur)
-    fMumpsData.icntl[18] = 0;
-
-    // ICNTL(20): RHS format (0 = dense)
-    fMumpsData.icntl[19] = 0;
-
-    // ICNTL(21): Solution format (0 = centralized)
-    fMumpsData.icntl[20] = 0;
-
-    // ICNTL(22): Out-of-core factorization (0 = in-core)
-    fMumpsData.icntl[21] = 0;
-
-    // ICNTL(23): Maximum memory for working space (0 = automatic)
-    fMumpsData.icntl[22] = 0;
-
-    // ICNTL(24): Null space detection (0 = no)
-    fMumpsData.icntl[23] = 0;
-
-    // ICNTL(28): Parallel ordering (0 = sequential, 1 = PT-SCOTCH, 2 = ParMetis)
-    // For sequential MUMPS, always use 0
-    fMumpsData.icntl[27] = 0;
-
-    // ICNTL(29): Parallel ordering method details
-    fMumpsData.icntl[28] = 0;
-
     // CNTL(1): Relative threshold for numerical pivoting
     // Default 0.01 for unsymmetric, 0.0 for symmetric positive definite
     if (fMatrixType == 0) { // Unsymmetric
@@ -846,7 +846,7 @@ int DataType([[maybe_unused]] std::complex<float> a) {
  * @param INFO2 Secondary information (INFO(2)).
  */
 template <typename TVar>
-void Error_check(int64_t INFO1, TVar INFO2) {
+void Error_check(MUMPS_INT INFO1, TVar INFO2) {
   // MUMPS error codes are stored in INFO(1)
   // Negative values indicate errors
   // Positive values indicate warnings
@@ -938,7 +938,7 @@ void Error_check(int64_t INFO1, TVar INFO2) {
     std::cout << "MUMPS error -28: NRHS is out of range. NRHS = " << INFO2 << " (should be >= 1)." << std::endl;
     break;
   case -29:
-    std::cout << "MUMPS error -29: LRHS is out of range. LRHS = " << INFO2 << ", should be >= max(1, N) = " << std::max(int64_t(1), static_cast<int64_t>(INFO2)) << "." << std::endl;
+    std::cout << "MUMPS error -29: LRHS is out of range. LRHS = " << INFO2 << ", should be >= max(1, N) = " << std::max(MUMPS_INT(1), static_cast<MUMPS_INT>(INFO2)) << "." << std::endl;
     break;
   case -30:
     std::cout << "MUMPS error -30: NRHS or LRHS incompatible with JOB. JOB = " << INFO2 << "." << std::endl;

@@ -6,6 +6,7 @@
 #include "dmumps_c.h"
 #include "pzmanvector.h"
 #include "tpzautopointer.h"
+#include <optional>
 
 #define JOB_INIT -1
 #define JOB_END -2
@@ -117,6 +118,8 @@ protected:
   bool fMumpsInitialized{false};
 
   bool fCustomSettings{false};
+
+  std::optional<MUMPS_INT> fICNTL[60];
 };
 
 #endif /* TPZMUMPSSOLVER_H */
