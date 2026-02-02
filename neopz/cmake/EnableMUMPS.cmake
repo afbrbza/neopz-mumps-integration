@@ -9,18 +9,15 @@ function(enable_mumps target)
 
     message(STATUS "[EnableMUMPS] Looking for MUMPS (sequential, double)...")
 
-    # evita teste de OpenMP Fortran pelo find_package
-    if(NOT DEFINED OpenMP_Fortran_FOUND)
-        set(OpenMP_Fortran_FOUND TRUE CACHE INTERNAL "")
-        set(OpenMP_Fortran_FLAGS "" CACHE INTERNAL "")
-        set(OpenMP_Fortran_LIBRARIES "" CACHE INTERNAL "")
-    endif()
-
+    # Habilita Fortran para permitir OpenMP_Fortran nos targets do MUMPS
+    enable_language(Fortran)
+    
     list(APPEND CMAKE_PREFIX_PATH "/opt/mumps")
 
     # ------------------------------------------------------------------------
-    # 1. Localiza o pacote MUMPS
+    # 1. Localiza o pacote MUMPS (precisa de OpenMP com Fortran)
     # ------------------------------------------------------------------------
+    find_package(OpenMP REQUIRED COMPONENTS C CXX Fortran)
     find_package(MUMPS CONFIG REQUIRED)
 
     # ------------------------------------------------------------------------
@@ -41,9 +38,6 @@ function(enable_mumps target)
             "[EnableMUMPS] MUMPS was not built with DOUBLE precision (dmumps)."
         )
     endif()
-
-    # Força OpenMP para paralelização mesmo com MUMPS sequencial (sem MPI)
-    find_package(OpenMP REQUIRED COMPONENTS CXX C)
 
     message(STATUS "MUMPS_DIR: ${MUMPS_DIR}
         parallel: ${MUMPS_parallel}
@@ -84,7 +78,7 @@ function(enable_mumps target)
     endif()
 
     # ------------------------------------------------------------------------
-    # 6. Linka MUMPS com OpenMP (sem MPI paralelo, usa libmpiseq)
+    # 6. Linka MUMPS com OpenMP e gfortran (sem MPI paralelo, usa libmpiseq)
     # ------------------------------------------------------------------------
     target_link_libraries(${target}
         PUBLIC MUMPS::MUMPS
@@ -92,6 +86,7 @@ function(enable_mumps target)
         OpenMP::OpenMP_C
         "$<$<BOOL:${MPI_CXX_FOUND}>:MPI::MPI_CXX>"
         MPI::MPI_Fortran MPI::MPI_C
+        gfortran
     )
     # always link MPI (MPI::MPI_Fortran and MPI::MPI_C) as we use the libmpiseq if not MUMPS_parallel
     
