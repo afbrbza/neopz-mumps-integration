@@ -5,14 +5,16 @@ sudo rm -rf /opt/mumps/*
 # ls -la /opt/mumps/
 rm -rf build
 sudo update
-sudo apt install -y libopenblas-dev liblapack-dev gfortran cmake
+sudo apt install -y gfortran cmake
 cmake -Bbuild \
     -DBUILD_DOUBLE=on \
-    -DMUMPS_parallel=false \
-    -DMUMPS_openmp=on \
-    -DBUILD_SHARED_LIBS=on \
+    -DBUILD_SHARED_LIBS=off \
+    -DMUMPS_find_SCALAPACK=off \
     -DMUMPS_intsize64=on \
-    -DLAPACK_VENDOR=OpenBLAS \
+    -DMUMPS_metis=on \
+    -DMUMPS_openmp=on \
+    -DMUMPS_parallel=false \
+    -DMUMPS_scalapack=off \
     --install-prefix /opt/mumps
 sudo cmake --build build
 sudo cmake --install build
