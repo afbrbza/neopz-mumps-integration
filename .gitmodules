@@ -2,3 +2,6 @@
 	path = neopz
 	url = https://github.com/afbrbza/neopz
 	branch = develop-main
+[submodule "mumps"]
+	path = mumps
+	url = https://github.com/giavancini/mumps
