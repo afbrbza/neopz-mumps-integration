@@ -1,6 +1,9 @@
 {
     "cmake.debugConfig": {
-        "args": ["12", "50", "1"],
+        "args": [
+            "20",
+            "1"
+        ],
         //"args": ["24", "550", "5"], --- IGNORE ---
         "externalConsole": false // Set to true if you want a separate terminal window
     }

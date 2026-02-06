@@ -1,6 +1,6 @@
 #include "OutputCapture.h"
 #include "TPZMultiphysicsCompMesh.h"
-#include "TPZSSpStructMatrixMumps.h"
+#include "TPZSSpStructMatrix.h"
 #include "TPZSimpleTimer.h"
 #include "TPZStructMatrixOMPorTBB.h"
 #include "TPZVTKGenerator.h"
@@ -17,7 +17,6 @@
 #include <TPZSYSMPMumps.h>
 #include <TPZSloanRenumbering.h>
 #include <iostream>
-#include <omp.h>
 
 using namespace std;
 
@@ -151,14 +150,9 @@ int main(int argc, char const *argv[]) {
   const int nthreadsAssembly = 0;
   const bool print = false;
 
-  int const num_procs = argc > 1 ? atoi(argv[1]) : 0;
-  if (num_procs > 0) {
-    omp_set_num_threads(num_procs);
-  }
-
   // ----- Create geometric mesh -----
   const bool isUseGenGrid = true; // set to 'false' to use manual gmesh creation
-  const int neldiv = argc > 2 ? atoi(argv[2]) : 140;
+  const int neldiv = argc > 1 ? atoi(argv[1]) : 140;
   TPZGeoMesh *gmesh = createMeshWithGenGrid({neldiv, neldiv}, {0., 0.}, {2., 1.});
 
   if (print)
@@ -170,7 +164,7 @@ int main(int argc, char const *argv[]) {
   }
 
   // ----- Create computational mesh -----
-  const int pOrder = argc > 3 ? atoi(argv[3]) : 7;
+  const int pOrder = argc > 2 ? atoi(argv[2]) : 7;
   TPZCompMesh *cmesh = createCompMesh(gmesh, pOrder);
   if (print)
     cmesh->Print(std::cout);
@@ -178,7 +172,7 @@ int main(int argc, char const *argv[]) {
   // ----- Create analysis object -----
   TPZLinearAnalysis an(cmesh);
   // ---- para quem tem mumps
-  TPZSSpStructMatrixMumps<STATE, TPZStructMatrixOR<STATE>> matsp(cmesh);
+  TPZSSpStructMatrix<STATE, TPZStructMatrixOR<STATE>> matsp(cmesh);
   // TPZSkylineStructMatrix<STATE> matsp(cmesh);
   matsp.SetNumThreads(nthreadsAssembly); // number of threads
   an.SetStructuralMatrix(matsp);
@@ -219,7 +213,7 @@ int main(int argc, char const *argv[]) {
     metrics = capture.parseMumpsOutput(capturedOutput);
   }
 
-  // std::cout << capturedOutput << std::endl;
+//   std::cout << capturedOutput << std::endl;
 
   std::cout << "MUMPS Solver Metrics:" << std::endl
             << "nelDiv: " << neldiv << std::endl
@@ -232,7 +226,7 @@ int main(int argc, char const *argv[]) {
             << "neopzSolveTime: " << std::fixed << std::setprecision(7) << neopzSolveTime << " s" << std::endl;
 
   // an.Run(); // assembles and solves the linear system
-    an.Solution().Print("Solution");
+    // an.Solution().Print("Solution");
 
   if (print) {
     // Post-processing the results

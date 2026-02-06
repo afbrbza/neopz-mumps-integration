@@ -1,3 +1,4 @@
 [submodule "neopz"]
 	path = neopz
 	url = https://github.com/afbrbza/neopz
+	branch = develop-main

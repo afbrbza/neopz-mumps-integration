@@ -86,3 +86,5 @@ MUMPS_work.*
 
 # Debugging
 .gdb_history
+
+neopz_install/

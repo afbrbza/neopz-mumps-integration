@@ -1,24 +1,13 @@
 cmake_minimum_required(VERSION 3.14)
 project(FirstTest)
 
-find_package(NeoPZ REQUIRED HINTS ${CMAKE_SOURCE_DIR}/../neopz_install/ ${CMAKE_SOURCE_DIR}/../neopz_install/)
+find_package(NeoPZ REQUIRED HINTS ${CMAKE_SOURCE_DIR}/neopz_install/ ${CMAKE_SOURCE_DIR}/../neopz_install/)
 
-set(MKL_THREADING "intel_thread" CACHE STRING "MKL threading layer" FORCE)
-find_package(MKL REQUIRED)
+# add_executable(main_mumps main_mumps.cpp OutputCapture.cpp)
+# target_link_libraries(main_mumps PRIVATE NeoPZ::pz)
 
-################################################################
-# PARDISO example
-add_executable(main.pardiso main.pardiso.cpp)
-target_sources(main.pardiso PRIVATE ${CMAKE_SOURCE_DIR}/OutputCapture.cpp)
-target_link_libraries(main.pardiso PRIVATE NeoPZ::pz MKL::mkl_intel_ilp64 MKL::mkl_intel_thread MKL::mkl_core iomp5)
-target_compile_definitions(main.pardiso PRIVATE MKL_ILP64)
-target_compile_options(main.pardiso PRIVATE -O3 -march=native)
+# add_executable(main_tosco main_tosco.cpp)
+# target_link_libraries(main_tosco PRIVATE NeoPZ::pz)
 
-################################################################
-# MUMPS example
-add_subdirectory(neopz)
-add_executable(main.mumps main.mumps.cpp)
-target_sources(main.mumps PRIVATE ${CMAKE_SOURCE_DIR}/OutputCapture.cpp)
-target_link_libraries(main.mumps PRIVATE NeoPZ::pz pzmumps)
-target_compile_options(main.mumps PRIVATE -O3 -march=native -fopenmp)
-target_link_options(main.mumps PRIVATE -fopenmp)
+add_executable(main_mumps_3d main_mumps_3d.cpp OutputCapture.cpp)
+target_link_libraries(main_mumps_3d PRIVATE NeoPZ::pz)
