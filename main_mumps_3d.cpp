@@ -403,12 +403,14 @@ int main(int argc, char *const argv[])
     cmesh = createCompMesh(gmesh, pord);
   }
 
+  std::cout << "Number of equations: " << cmesh->NEquations() << "\n";
+
   // TPZAutoPointer<TPZCompMesh> cmesh = createCompMesh(gmesh, pord);
   // cmesh->Print(std::cout);
 
   //-------------------------Create analysis object--------------------------
   TPZSimpleTimer tot("total time: ");
-  TPZLinearAnalysis an(cmesh);
+  TPZLinearAnalysis an(cmesh, RenumType::ENone);
   TPZSSpStructMatrix<STATE> matsp(cmesh);
   // TPZSkylineStructMatrix<STATE> matsp(cmesh);
   matsp.SetNumThreads(nthreads);
@@ -464,7 +466,6 @@ int main(int argc, char *const argv[])
   // auto &mumpsControl = dynamic_cast<TPZSYsmpMatrixMumps<STATE> *>(mCast.operator->())->GetMumpsControl();
   // mumpsControl.SetMessageLevel(2);
 
-  std::cout << "Number of equations: " << cmesh->NEquations() << "\n";
   std::cout << "Number of non-zeros: " << nnz << "\n";
   TPZSimpleTimer t("Solving system");
 
@@ -491,6 +492,8 @@ int main(int argc, char *const argv[])
             << "Estimated number of non-zeros: " << nnz << std::endl;
   if (metrics.numThreads)
     std::cout << "nThreads: " << metrics.numThreads << std::endl;
+  if (metrics.orderingBasedOn.size() > 0)
+    std::cout << "Ordering based on: " << metrics.orderingBasedOn << std::endl;
   if (metrics.factorizationTime)
     std::cout << "factorizationTime: " << metrics.factorizationTime << " s" << std::endl;
   if (metrics.solveTime)

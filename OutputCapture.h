@@ -26,6 +26,9 @@ struct SolverMetrics {
 
   // Iterações (para PARDISO com CGS)
   int cgsIterations = 0;
+
+  // Ordering based on the output (e.g., "METIS", "AMD", etc.)
+  std::string orderingBasedOn;
 };
 
 class OutputCapture {

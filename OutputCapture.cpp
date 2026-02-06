@@ -121,6 +121,13 @@ SolverMetrics OutputCapture::parseMumpsOutput(const std::string& output) {
     if (std::regex_search(output, match, regex)) {
         metrics.maxFrontalSize = std::stoi(match[1]);
     }
+     
+    // Extrair o Ordering utilizado (MUMPS is "Ordering based on METIS" ou similar)
+    regex = std::regex(R"(Ordering based on\s+(\w+))");
+    if (std::regex_search(output, match, regex)) {
+        metrics.orderingBasedOn = match[1];
+    }
+
     
     metrics.totalTime = metrics.analysisTime + metrics.factorizationTime + metrics.solveTime;
     
