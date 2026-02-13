@@ -567,7 +567,7 @@
                         <th>Equations</th>
                         <th>Factorization (s)</th>
                         <th>Total Time (s)</th>
-                        <th>Speedup</th>
+                        <th>Speedup <span title="Calculated as: Slowest Time ÷ Current Time" style="cursor: help;">ℹ️</span></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -587,7 +587,7 @@
                         <td>${d.equations.toLocaleString()}</td>
                         <td>${d.factorizationTime.toFixed(2)}</td>
                         <td>${d.solveTime.toFixed(2)}</td>
-                        <td>${speedup}x</td>
+                        <td title="Slowest: ${sorted[sorted.length - 1].solveTime.toFixed(2)}s ÷ This: ${d.solveTime.toFixed(2)}s" style="cursor: help;">${speedup}x</td>
                     </tr>
                 `;
                 });
