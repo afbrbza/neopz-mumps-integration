@@ -6,5 +6,8 @@
         ],
         //"args": ["24", "550", "5"], --- IGNORE ---
         "externalConsole": false // Set to true if you want a separate terminal window
+    },
+    "cmake.environment": {
+        "OMP_NUM_THREADS": "6"
     }
 }

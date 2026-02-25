@@ -461,10 +461,11 @@ int main(int argc, char *const argv[])
   // auto &pardisoControl = dynamic_cast<TPZSYsmpMatrixPardiso<STATE> *>(mCast.operator->())->GetPardisoControl();
   // pardisoControl.SetMessageLevel(1);
 
-  // auto &mSolverCast = an.MatrixSolver<STATE>();
-  // auto mCast = mSolverCast.Matrix();
-  // auto &mumpsControl = dynamic_cast<TPZSYsmpMatrixMumps<STATE> *>(mCast.operator->())->GetMumpsControl();
-  // mumpsControl.SetMessageLevel(2);
+  auto &mSolverCast = an.MatrixSolver<STATE>();
+  auto mCast = mSolverCast.Matrix();
+  mCast->SetDefPositive(true); // Say to MUMPS that the matrix is positive definite (if it is) to enable optimizations. If not sure, leave as false.
+  auto &mumpsControl = dynamic_cast<TPZSYsmpMatrixMumps<STATE> *>(mCast.operator->())->GetMumpsControl();
+  mumpsControl.SetMessageLevel(2);
 
   std::cout << "Number of non-zeros: " << nnz << "\n";
   TPZSimpleTimer t("Solving system");

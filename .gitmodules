@@ -1,7 +1,7 @@
 [submodule "neopz"]
 	path = neopz
 	url = https://github.com/afbrbza/neopz
-	branch = develop-main
+	branch = develop
 [submodule "mumps"]
 	path = mumps
 	url = https://github.com/giavancini/mumps
