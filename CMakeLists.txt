@@ -11,3 +11,6 @@ find_package(NeoPZ REQUIRED HINTS ${CMAKE_SOURCE_DIR}/neopz_install/ ${CMAKE_SOU
 
 add_executable(main_mumps_3d main_mumps_3d.cpp OutputCapture.cpp)
 target_link_libraries(main_mumps_3d PRIVATE NeoPZ::pz)
+
+add_executable(main_mumps_3d_complex main_mumps_3d_complex.cpp OutputCapture.cpp)
+target_link_libraries(main_mumps_3d_complex PRIVATE NeoPZ::pz)
