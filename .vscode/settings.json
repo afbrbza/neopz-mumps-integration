@@ -1,7 +1,7 @@
 {
     "cmake.debugConfig": {
         "args": [
-            "20",
+            "2",
             "1"
         ],
         //"args": ["24", "550", "5"], --- IGNORE ---
