@@ -164,7 +164,10 @@ void runMumpsComplex(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, 
   an.SetStructuralMatrix(matsp);
 
   TPZStepSolver<CSTATE> step;
-  step.SetDirect(ECholesky); // Mass matrix is Hermitian positive definite
+  // Use ELDLt (symmetric indefinite): ZMUMPS has no Hermitian variant.
+  // The mass matrix is real-valued stored as CSTATE, so it is both Hermitian
+  // and complex-symmetric; SYM=2 (symmetric general) is the correct ZMUMPS mode.
+  step.SetDirect(ELDLt);
 
   an.SetSolver(step);
   an.Assemble();
@@ -179,8 +182,12 @@ void runMumpsComplex(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, 
 
   auto &mSolverCast = an.MatrixSolver<CSTATE>();
   auto mCast = mSolverCast.Matrix();
-  mCast->SetDefPositive(true);
   auto &solverControl = dynamic_cast<TPZSYsmpMatrixMumps<CSTATE> *>(mCast.operator->())->GetMumpsControl();
+  // Explicitly override to SymProp::Sym so that MatrixType() uses SYM=2 (complex symmetric).
+  solverControl.SetMatrixType(SymProp::Sym, TPZMumpsSolver<CSTATE>::MProperty::EIndefinite);
+  // Lock settings so TPZSYsmpMatrixMumps::Decompose won't re-detect from
+  // the matrix's fSymProp (which is Herm for all complex symmetric matrices in NeoPZ).
+  solverControl.LockSettings();
   solverControl.SetMessageLevel(2);
 
   std::cout << "Number of non-zeros: " << nnz << "\n";
