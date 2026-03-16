@@ -279,7 +279,7 @@ int main(int argc, char *const argv[]) {
   }
 #endif
 
-#ifdef PZ_USING_MKL &&PZ_USING_MUMPS
+#ifdef PZ_USING_MKL && PZ_USING_MUMPS
   const REAL err = RelativeL2ErrorComplex(solPardiso, solMumps);
   std::cout << "\n=== Solution comparison ===" << std::endl
             << "Relative L2 error (Pardiso vs ZMUMPS): " << std::scientific << err << std::endl;
