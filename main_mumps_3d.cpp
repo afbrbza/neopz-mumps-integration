@@ -199,7 +199,7 @@ TPZCompMesh *createCompMesh(TPZGeoMesh *gmesh, const int pord) {
   return cmesh;
 }
 
-void runMumps(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nthreads) {
+void runMumps(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nthreads, bool enableSolverStats, bool showSolution) {
   //-------------------------Create analysis object--------------------------
   TPZLinearAnalysis an(cmesh, RenumType::ENone);
   TPZSSpStructMatrixMumps<STATE> matsp(cmesh);
@@ -235,8 +235,10 @@ void runMumps(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nth
   auto &mSolverCast = an.MatrixSolver<STATE>();
   auto mCast = mSolverCast.Matrix();
   mCast->SetDefPositive(true); // Say to MUMPS that the matrix is positive definite (if it is) to enable optimizations. If not sure, leave as false.
-  auto &solverControl = dynamic_cast<TPZSYsmpMatrixMumps<STATE> *>(mCast.operator->())->GetMumpsControl();
-  solverControl.SetMessageLevel(2);
+  if (enableSolverStats) {
+    auto &solverControl = dynamic_cast<TPZSYsmpMatrixMumps<STATE> *>(mCast.operator->())->GetMumpsControl();
+    solverControl.SetMessageLevel(2);
+  }
 
   std::cout << "Number of non-zeros: " << nnz << "\n";
 
@@ -256,7 +258,8 @@ void runMumps(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nth
 
   // std::cout << capturedOutput << std::endl;
 
-  std::cout << "MUMPS Solver Metrics:" << std::endl
+  std::cout << "===========================================" << std::endl
+            << "MUMPS Solver Metrics:" << std::endl
             << "nelDiv: " << neldiv << std::endl
             << "pOrder: " << pOrder << std::endl
             << "Number of equations: " << cmesh->NEquations() << std::endl
@@ -269,22 +272,25 @@ void runMumps(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nth
     std::cout << "factorizationTime: " << metrics.factorizationTime << " s" << std::endl;
   if (metrics.solveTime)
     std::cout << "solveTime: " << std::fixed << std::setprecision(7) << metrics.solveTime << " s" << std::endl;
-  std::cout << "neopzSolveTime: " << std::fixed << std::setprecision(7) << neopzSolveTime << " s" << std::endl;
+  std::cout << "neopzSolveTime: " << std::fixed << std::setprecision(7) << neopzSolveTime << " s" << std::endl
+            << "===========================================" << std::endl;
 
-  an.Solution().Print("Solution from MUMPS");
+  if (showSolution) {
+    an.Solution().Print("Solution from MUMPS");
 
-  // ---------------------------------------
+    // ---------------------------------------
 
-  // Post-processing
-  const std::string plotfile("PostProcessMumps");
-  constexpr int vtkRes(0);
+    // Post-processing
+    const std::string plotfile("PostProcessMumps");
+    constexpr int vtkRes(0);
 
-  TPZManVector<std::string, 2> fields = {"Flux", "Pressure"};
-  auto vtk = TPZVTKGenerator(cmesh, fields, plotfile, vtkRes);
-  vtk.Do();
+    TPZManVector<std::string, 2> fields = {"Flux", "Pressure"};
+    auto vtk = TPZVTKGenerator(cmesh, fields, plotfile, vtkRes);
+    vtk.Do();
+  }
 }
 
-void runPardiso(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nthreads) {
+void runPardiso(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nthreads, bool enableSolverStats, bool showSolution) {
   //-------------------------Create analysis object--------------------------
   TPZLinearAnalysis an(cmesh, RenumType::ENone);
   TPZSSpStructMatrix<STATE> matsp(cmesh);
@@ -313,8 +319,10 @@ void runPardiso(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int n
   auto &mSolverCast = an.MatrixSolver<STATE>();
   auto mCast = mSolverCast.Matrix();
   mCast->SetDefPositive(true); // Say to Pardiso that the matrix is positive definite (if it is) to enable optimizations. If not sure, leave as false.
-  auto &solverControl = dynamic_cast<TPZSYsmpMatrixPardiso<STATE> *>(mCast.operator->())->GetPardisoControl();
-  solverControl.SetMessageLevel(1);
+  if (enableSolverStats) {
+    auto &solverControl = dynamic_cast<TPZSYsmpMatrixPardiso<STATE> *>(mCast.operator->())->GetPardisoControl();
+    solverControl.SetMessageLevel(1);
+  }
 
   std::cout << "Number of non-zeros: " << nnz << "\n";
 
@@ -334,7 +342,8 @@ void runPardiso(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int n
 
   // std::cout << capturedOutput << std::endl;
 
-  std::cout << "PARDISO Solver Metrics:" << std::endl
+  std::cout << "===========================================" << std::endl
+            << "PARDISO Solver Metrics:" << std::endl
             << "nelDiv: " << neldiv << std::endl
             << "pOrder: " << pOrder << std::endl
             << "Number of equations: " << cmesh->NEquations() << std::endl
@@ -347,19 +356,22 @@ void runPardiso(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int n
     std::cout << "factorizationTime: " << metrics.factorizationTime << " s" << std::endl;
   if (metrics.solveTime)
     std::cout << "solveTime: " << std::fixed << std::setprecision(7) << metrics.solveTime << " s" << std::endl;
-  std::cout << "neopzSolveTime: " << std::fixed << std::setprecision(7) << neopzSolveTime << " s" << std::endl;
+  std::cout << "neopzSolveTime: " << std::fixed << std::setprecision(7) << neopzSolveTime << " s" << std::endl
+            << "===========================================" << std::endl;
 
-  an.Solution().Print("Solution from Pardiso");
+  if (showSolution) {
+    an.Solution().Print("Solution from Pardiso");
 
-  // ---------------------------------------
+    // ---------------------------------------
 
-  // Post-processing
-  const std::string plotfile("PostProcessPardiso");
-  constexpr int vtkRes(0);
+    // Post-processing
+    const std::string plotfile("PostProcessPardiso");
+    constexpr int vtkRes(0);
 
-  TPZManVector<std::string, 2> fields = {"Flux", "Pressure"};
-  auto vtk = TPZVTKGenerator(cmesh, fields, plotfile, vtkRes);
-  vtk.Do();
+    TPZManVector<std::string, 2> fields = {"Flux", "Pressure"};
+    auto vtk = TPZVTKGenerator(cmesh, fields, plotfile, vtkRes);
+    vtk.Do();
+  }
 }
 
 int main(int argc, char *const argv[]) {
@@ -418,19 +430,22 @@ int main(int argc, char *const argv[]) {
   // TPZAutoPointer<TPZCompMesh> cmesh = createCompMesh(gmesh, pord);
   // cmesh->Print(std::cout);
 
-  #ifdef PZ_USING_MKL
+  const bool enableSolverStats = argc > 3 ? atoi(argv[3]) == 1 : false;
+  const bool showSolution = argc > 4 ? atoi(argv[4]) == 1 : false;
+
+#ifdef PZ_USING_MKL
   {
     TPZAutoPointer<TPZCompMesh> cmeshPardiso = new TPZCompMesh(*cmesh);
-    runPardiso(cmeshPardiso, neldiv, pord, nthreads);
+    runPardiso(cmeshPardiso, neldiv, pord, nthreads, enableSolverStats, showSolution);
   }
-  #endif
-  
-  #ifdef PZ_USING_MUMPS
+#endif
+
+#ifdef PZ_USING_MUMPS
   {
     TPZAutoPointer<TPZCompMesh> cmeshMumps = new TPZCompMesh(*cmesh);
-    runMumps(cmeshMumps, neldiv, pord, nthreads);
+    runMumps(cmeshMumps, neldiv, pord, nthreads, enableSolverStats, showSolution);
   }
-  #endif
+#endif
 
   return 0;
 }
