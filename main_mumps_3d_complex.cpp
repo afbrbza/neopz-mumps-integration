@@ -278,14 +278,6 @@ int main(int argc, char *const argv[]) {
   const bool enableSolverStats = argc > 3 ? atoi(argv[3]) == 1 : false;
   const bool showSolution = argc > 4 ? atoi(argv[4]) == 1 : false;
 
-#ifdef PZ_USING_MKL
-  {
-    TPZAutoPointer<TPZCompMesh> cmeshPardiso = new TPZCompMesh(*cmesh);
-    runPardisoComplex(cmeshPardiso, neldiv, pOrder, nthreads, enableSolverStats, showSolution);
-    solPardiso = cmeshPardiso->Solution();
-  }
-#endif
-
 #ifdef PZ_USING_MUMPS
   {
     TPZAutoPointer<TPZCompMesh> cmeshMumps = new TPZCompMesh(*cmesh);
@@ -294,7 +286,15 @@ int main(int argc, char *const argv[]) {
   }
 #endif
 
-#ifdef PZ_USING_MKL &&PZ_USING_MUMPS
+#ifdef PZ_USING_MKL
+  {
+    TPZAutoPointer<TPZCompMesh> cmeshPardiso = new TPZCompMesh(*cmesh);
+    runPardisoComplex(cmeshPardiso, neldiv, pOrder, nthreads, enableSolverStats, showSolution);
+    solPardiso = cmeshPardiso->Solution();
+  }
+#endif
+
+#ifdef PZ_USING_MKL && PZ_USING_MUMPS
   const REAL err = RelativeL2ErrorComplex(solPardiso, solMumps);
   std::cout << "\n=== Solution comparison ===" << std::endl
             << "Relative L2 error (Pardiso vs ZMUMPS): " << std::scientific << err << std::endl;

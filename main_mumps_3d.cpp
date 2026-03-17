@@ -433,17 +433,17 @@ int main(int argc, char *const argv[]) {
   const bool enableSolverStats = argc > 3 ? atoi(argv[3]) == 1 : false;
   const bool showSolution = argc > 4 ? atoi(argv[4]) == 1 : false;
 
-#ifdef PZ_USING_MKL
-  {
-    TPZAutoPointer<TPZCompMesh> cmeshPardiso = new TPZCompMesh(*cmesh);
-    runPardiso(cmeshPardiso, neldiv, pord, nthreads, enableSolverStats, showSolution);
-  }
-#endif
-
 #ifdef PZ_USING_MUMPS
   {
     TPZAutoPointer<TPZCompMesh> cmeshMumps = new TPZCompMesh(*cmesh);
     runMumps(cmeshMumps, neldiv, pord, nthreads, enableSolverStats, showSolution);
+  }
+#endif
+
+#ifdef PZ_USING_MKL
+  {
+    TPZAutoPointer<TPZCompMesh> cmeshPardiso = new TPZCompMesh(*cmesh);
+    runPardiso(cmeshPardiso, neldiv, pord, nthreads, enableSolverStats, showSolution);
   }
 #endif
 
