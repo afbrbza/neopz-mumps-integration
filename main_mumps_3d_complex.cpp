@@ -7,7 +7,11 @@
 #include "TPZMultiphysicsCompMesh.h"
 #include "TPZSSpStructMatrix.h"
 #include "TPZSSpStructMatrixMumps.h"
+
+#ifdef PZ_USING_MKL
 #include "TPZSYSMPPardiso.h"
+#endif
+
 #include "TPZSimpleTimer.h"
 #include "TPZVTKGenerator.h"
 #include "TPZVTKGeoMesh.h"
@@ -73,6 +77,7 @@ TPZCompMesh *createCompMeshComplex(TPZGeoMesh *gmesh, const int pord) {
 }
 
 void runPardisoComplex(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nthreads, bool enableSolverStats, bool showSolution) {
+#ifdef PZ_USING_MKL
   TPZLinearAnalysis an(cmesh, RenumType::ENone);
 
   TPZSSpStructMatrix<CSTATE> matsp(cmesh);
@@ -146,6 +151,9 @@ void runPardisoComplex(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder
     auto vtk = TPZVTKGenerator(cmesh, fields, plotfile, vtkRes);
     vtk.Do();
   }
+#else
+  std::cerr << "Pardiso solver not available. Please compile with MKL support to enable this feature." << std::endl;
+#endif
 }
 
 /// Returns ||a - b||_2 / ||a||_2  (or ||a-b||_2 when ||a||_2 ~= 0).
@@ -163,6 +171,7 @@ static REAL RelativeL2ErrorComplex(const TPZFMatrix<CSTATE> &ref, const TPZFMatr
 }
 
 void runMumpsComplex(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nthreads, bool enableSolverStats, bool showSolution) {
+#ifdef PZ_USING_MUMPS
   TPZLinearAnalysis an(cmesh, RenumType::ENone);
 
   TPZSSpStructMatrixMumps<CSTATE> matsp(cmesh);
@@ -243,6 +252,9 @@ void runMumpsComplex(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, 
     auto vtk = TPZVTKGenerator(cmesh, fields, plotfile, vtkRes);
     vtk.Do();
   }
+#else
+  std::cerr << "MUMPS solver not available. Please compile with MUMPS support to enable this feature." << std::endl;
+#endif
 }
 
 int main(int argc, char *const argv[]) {
@@ -294,7 +306,8 @@ int main(int argc, char *const argv[]) {
   }
 #endif
 
-#ifdef PZ_USING_MKL && PZ_USING_MUMPS
+#ifdef PZ_USING_MKL
+#ifdef PZ_USING_MUMPS
   const REAL err = RelativeL2ErrorComplex(solPardiso, solMumps);
   std::cout << "\n=== Solution comparison ===" << std::endl
             << "Relative L2 error (Pardiso vs ZMUMPS): " << std::scientific << err << std::endl;
@@ -302,9 +315,13 @@ int main(int argc, char *const argv[]) {
     std::cout << "PASS: solutions agree to within 1e-10." << std::endl;
   else
     std::cout << "WARN: solutions differ more than 1e-10!" << std::endl;
-#else
-  std::cout << "\n=== Solution comparison skipped (only one solver [or none] available) ===" << std::endl;
+
+  return 0;
+
 #endif
+#endif
+
+  std::cout << "\n=== Solution comparison skipped (only one solver [or none] available) ===" << std::endl;
 
   return 0;
 }

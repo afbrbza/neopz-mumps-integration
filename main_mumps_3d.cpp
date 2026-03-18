@@ -2,7 +2,11 @@
 #include "TPZMultiphysicsCompMesh.h"
 #include "TPZSSpStructMatrix.h"
 #include "TPZSSpStructMatrixMumps.h"
+
+#ifdef PZ_USING_MKL
 #include "TPZSYSMPPardiso.h"
+#endif
+
 #include "TPZSimpleTimer.h"
 #include "TPZStructMatrixOMPorTBB.h"
 #include "TPZVTKGenerator.h"
@@ -200,8 +204,9 @@ TPZCompMesh *createCompMesh(TPZGeoMesh *gmesh, const int pord) {
 }
 
 void runMumps(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nthreads, bool enableSolverStats, bool showSolution) {
+#ifdef PZ_USING_MUMPS
   //-------------------------Create analysis object--------------------------
-  TPZLinearAnalysis an(cmesh, RenumType::ENone);
+  TPZLinearAnalysis an(cmesh, RenumType::EMetis);
   TPZSSpStructMatrixMumps<STATE> matsp(cmesh);
   // TPZSkylineStructMatrix<STATE> matsp(cmesh);
   matsp.SetNumThreads(nthreads);
@@ -288,9 +293,13 @@ void runMumps(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nth
     auto vtk = TPZVTKGenerator(cmesh, fields, plotfile, vtkRes);
     vtk.Do();
   }
+#else
+  std::cerr << "MUMPS solver not available. Please compile with MUMPS support to enable this feature." << std::endl;
+#endif
 }
 
 void runPardiso(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nthreads, bool enableSolverStats, bool showSolution) {
+#ifdef PZ_USING_MKL
   //-------------------------Create analysis object--------------------------
   TPZLinearAnalysis an(cmesh, RenumType::ENone);
   TPZSSpStructMatrix<STATE> matsp(cmesh);
@@ -372,6 +381,9 @@ void runPardiso(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int n
     auto vtk = TPZVTKGenerator(cmesh, fields, plotfile, vtkRes);
     vtk.Do();
   }
+#else
+  std::cerr << "Pardiso solver not available. Please compile with MKL support to enable this feature." << std::endl;
+#endif
 }
 
 int main(int argc, char *const argv[]) {
