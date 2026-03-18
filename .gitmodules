@@ -4,4 +4,4 @@
 	branch = develop
 [submodule "mumps"]
 	path = mumps
-	url = https://github.com/giavancini/mumps
+	url = https://github.com/scivision/mumps-superbuild.git
