@@ -206,7 +206,7 @@ TPZCompMesh *createCompMesh(TPZGeoMesh *gmesh, const int pord) {
 void runMumps(TPZAutoPointer<TPZCompMesh> cmesh, int neldiv, int pOrder, int nthreads, bool enableSolverStats, bool showSolution) {
 #ifdef PZ_USING_MUMPS
   //-------------------------Create analysis object--------------------------
-  TPZLinearAnalysis an(cmesh, RenumType::EMetis);
+  TPZLinearAnalysis an(cmesh, RenumType::ENone);
   TPZSSpStructMatrixMumps<STATE> matsp(cmesh);
   // TPZSkylineStructMatrix<STATE> matsp(cmesh);
   matsp.SetNumThreads(nthreads);
